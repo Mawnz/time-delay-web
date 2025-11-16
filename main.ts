@@ -26,8 +26,7 @@ const sessionsList = document.getElementById('sessions-list') as HTMLUListElemen
 const closeSessionsButton = document.getElementById('close-sessions') as HTMLButtonElement;
 const importSessionButton = document.getElementById('import-session') as HTMLButtonElement;
 const importFileInput = document.getElementById('import-file-input') as HTMLInputElement;
-const setAButton = document.getElementById('set-a') as HTMLButtonElement;
-const setBButton = document.getElementById('set-b') as HTMLButtonElement;
+const createLoopButton = document.getElementById('create-loop') as HTMLButtonElement;
 const toggleLoopButton = document.getElementById('toggle-loop') as HTMLButtonElement;
 const exportClipButton = document.getElementById('export-clip') as HTMLButtonElement;
 const lineColorInput = document.getElementById('line-color') as HTMLInputElement;
@@ -75,6 +74,89 @@ window.addEventListener('load', async () => {
     });
     redoAnnotationButton.addEventListener('click', () => {
         annotation.redo();
+    });
+
+    // Draggable Loop Selector Logic
+    const timelineRangeHighlight = document.getElementById('timeline-range-highlight') as HTMLDivElement;
+    const thumbnailTimeline = document.getElementById('thumbnail-timeline') as HTMLDivElement;
+
+    let isDragging = false;
+    let isResizing = false;
+    let activeHandle: 'left' | 'right' | null = null;
+    let startX = 0;
+    let startLeft = 0;
+    let startWidth = 0;
+
+    createLoopButton?.addEventListener('click', () => {
+        if (!player || delayedVideoElement.seekable.length === 0) return;
+        
+        const seekableEnd = delayedVideoElement.seekable.end(delayedVideoElement.seekable.length - 1);
+        if (!isFinite(seekableEnd) || seekableEnd === 0) return;
+
+        // Create a default loop region (e.g., 20% to 80% of current duration)
+        const pointATime = seekableEnd * 0.2;
+        const pointBTime = seekableEnd * 0.8;
+        player.setPointA(pointATime);
+        player.setPointB(pointBTime);
+        timelineRangeHighlight.style.pointerEvents = 'auto'; // Make it interactive
+    });
+
+    timelineRangeHighlight.addEventListener('mousedown', (e) => {
+        if ((e.target as HTMLElement).classList.contains('resize-handle')) return;
+        e.preventDefault();
+        isDragging = true;
+        startX = e.clientX;
+        startLeft = timelineRangeHighlight.offsetLeft;
+    });
+
+    Array.from(timelineRangeHighlight.children).forEach(handle => {
+        handle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            isResizing = true;
+            activeHandle = (e.target as HTMLElement).classList.contains('left') ? 'left' : 'right';
+            startX = e.clientX;
+            startLeft = timelineRangeHighlight.offsetLeft;
+            startWidth = timelineRangeHighlight.offsetWidth;
+        });
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!player || (!isDragging && !isResizing)) return;
+        e.preventDefault();
+
+        const seekableEnd = delayedVideoElement.seekable.end(delayedVideoElement.seekable.length - 1);
+        if (!isFinite(seekableEnd) || seekableEnd === 0) return;
+
+        const timelineRect = thumbnailTimeline.getBoundingClientRect();
+        const scrollWidth = thumbnailTimeline.scrollWidth;
+        const dx = e.clientX - startX;
+
+        if (isDragging) {
+            const newLeft = Math.max(0, Math.min(startLeft + dx, scrollWidth - timelineRangeHighlight.offsetWidth));
+            const newStartPercentage = newLeft / scrollWidth;
+            const newEndPercentage = (newLeft + timelineRangeHighlight.offsetWidth) / scrollWidth;
+            
+            player.setPointA(newStartPercentage * seekableEnd);
+            player.setPointB(newEndPercentage * seekableEnd);
+        } else if (isResizing) {
+            if (activeHandle === 'left') {
+                const newWidth = Math.max(20, startWidth - dx);
+                const newLeft = Math.max(0, startLeft + dx);
+                const newStartPercentage = newLeft / scrollWidth;
+                player.setPointA(newStartPercentage * seekableEnd);
+            } else if (activeHandle === 'right') {
+                const newWidth = Math.max(20, startWidth + dx);
+                const newEndPercentage = (startLeft + newWidth) / scrollWidth;
+                player.setPointB(newEndPercentage * seekableEnd);
+            }
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        isDragging = false;
+        isResizing = false;
+        activeHandle = null;
     });
 });
 
@@ -289,18 +371,6 @@ playPauseButton?.addEventListener('click', () => {
 
 slowMotionButton?.addEventListener('click', () => {
     if (player) player.toggleSlowMotion();
-});
-
-setAButton?.addEventListener('click', () => {
-    if (player) {
-        player.setPointA(delayedVideoElement.currentTime);
-    }
-});
-
-setBButton?.addEventListener('click', () => {
-    if (player) {
-        player.setPointB(delayedVideoElement.currentTime);
-    }
 });
 
 toggleLoopButton?.addEventListener('click', () => {

@@ -22,19 +22,31 @@
             width: 3px;
             background-color: #ef4444; /* Red-500 */
             pointer-events: none;
-            z-index: 10;
+            z-index: 30;
         }
-        #recording-indicator {
+        #timeline-range-highlight {
             position: absolute;
-            top: 1rem;
-            left: 1rem;
-            background-color: red;
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
-            font-weight: bold;
+            top: 0;
+            height: 100%;
+            background-color: rgba(0, 123, 255, 0.4);
+            border-left: 2px solid #007bff;
+            border-right: 2px solid #007bff;
+            cursor: move;
             z-index: 20;
-            display: none; /* Hidden by default */
+        }
+        .resize-handle {
+            position: absolute;
+            top: 0;
+            width: 10px;
+            height: 100%;
+            background-color: rgba(0, 123, 255, 0.7);
+            cursor: col-resize;
+        }
+        .resize-handle.left {
+            left: -5px;
+        }
+        .resize-handle.right {
+            right: -5px;
         }
     </style>
 </head>
@@ -52,7 +64,10 @@
             <!-- Thumbnail Timeline -->
             <div id="thumbnail-timeline" class="relative w-full h-16 sm:h-24 bg-gray-900/50 overflow-x-auto whitespace-nowrap cursor-pointer rounded-lg border-2 border-transparent hover:border-gray-700">
                 <div id="timeline-indicator"></div>
-                <div id="timeline-range-highlight" class="absolute top-0 h-full bg-blue-500 opacity-30 pointer-events-none hidden"></div>
+                <div id="timeline-range-highlight" class="absolute top-0 h-full bg-blue-500 opacity-30 pointer-events-none hidden">
+                    <div class="resize-handle left"></div>
+                    <div class="resize-handle right"></div>
+                </div>
             </div>
             
             <!-- Buttons Container -->
@@ -63,11 +78,8 @@
                 <button id="frame-backward" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-step-backward"></i></button>
                 <button id="frame-forward" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-step-forward"></i></button>
                 
-                <!-- A/B Point Buttons -->
-                <button id="set-a" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-flag-a"></i> Set A</button>
-                <button id="set-b" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-flag-b"></i> Set B</button>
-                
-                <!-- Loop Button -->
+                <!-- Loop Controls -->
+                <button id="create-loop" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-vector-square"></i> Create Loop</button>
                 <button id="toggle-loop" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-redo-alt"></i> Loop</button>
 
                 <!-- Spacer -->

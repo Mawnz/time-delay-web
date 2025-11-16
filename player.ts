@@ -144,12 +144,22 @@ export class Player {
         if (!isFinite(seekableEnd) || seekableEnd === 0) return;
 
         const percentage = this.videoElement.currentTime / seekableEnd;
-        const indicatorPosition = percentage * this.thumbnailTimeline.scrollWidth;
+        const scrollWidth = this.thumbnailTimeline.scrollWidth;
+        const indicatorPosition = percentage * scrollWidth;
+
         this.timelineIndicator.style.left = `${indicatorPosition}px`;
 
-        // If video is playing, keep the indicator in view
+        // If video is playing, adjust scroll to keep indicator in view
         if (!this.videoElement.paused) {
-            this.timelineIndicator.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            const timelineWidth = this.thumbnailTimeline.clientWidth;
+            const scrollMargin = timelineWidth * 0.8; // Start scrolling when indicator passes 80% of the view
+            const indicatorVisiblePosition = indicatorPosition - this.thumbnailTimeline.scrollLeft;
+
+            if (indicatorVisiblePosition > scrollMargin) {
+                // Smoothly scroll to keep the indicator around the 80% mark
+                const targetScrollLeft = indicatorPosition - scrollMargin;
+                this.thumbnailTimeline.scrollLeft += (targetScrollLeft - this.thumbnailTimeline.scrollLeft) * 0.2;
+            }
         }
         this.updateTimelineRangeHighlight();
     }
