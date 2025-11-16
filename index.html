@@ -1,0 +1,84 @@
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Time Delay</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module" src="main.js"></script>
+    <style>
+        body {
+            overscroll-behavior: none;
+        }
+        .video-container {
+            width: 100vw;
+            height: 100vh;
+            background-color: #000;
+        }
+        .video-container:hover .controls-overlay,
+        .video-container:has(.controls-overlay:hover) .controls-overlay {
+            opacity: 1;
+            visibility: visible;
+        }
+        #timeline-indicator {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background-color: #ef4444; /* Red-500 */
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body class="bg-black text-white flex flex-col items-center justify-center">
+
+    <!-- Main Video and Controls Container -->
+    <div class="relative video-container">
+        <video id="delayed" class="w-full h-full object-contain" autoplay></video>
+        <canvas id="annotation-canvas" class="absolute top-0 left-0 w-full h-full" style="pointer-events: none;"></canvas>
+
+        <!-- Controls Overlay -->
+        <div class="controls-overlay absolute bottom-0 left-0 right-0 p-2 sm:p-4 bg-gradient-to-t from-black via-black/70 to-transparent opacity-0 visibility-hidden transition-all duration-300">
+            
+            <!-- Thumbnail Timeline -->
+            <div id="thumbnail-timeline" class="relative w-full h-16 sm:h-24 bg-gray-900/50 overflow-x-auto whitespace-nowrap cursor-pointer rounded-lg border-2 border-transparent hover:border-gray-700">
+                <div id="timeline-indicator"></div>
+            </div>
+            
+            <!-- Buttons Container -->
+            <div class="w-full flex flex-wrap justify-center items-center gap-2 sm:gap-4 mt-2">
+                <!-- Playback Buttons -->
+                <button id="play-pause" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base">Play/Pause</button>
+                <button id="slow-motion" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base">Slow-Mo</button>
+                <button id="frame-backward" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base">&lt;&lt;</button>
+                <button id="frame-forward" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base">&gt;&gt;</button>
+                
+                <!-- Spacer -->
+                <div class="w-px h-8 bg-gray-600 hidden sm:block"></div>
+
+                <!-- App Controls -->
+                <button id="toggle" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base">Start Camera</button>
+                <button id="sessions" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base">Sessions</button>
+                <button id="clear" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base">Clear All</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Session Modal -->
+    <div id="sessions-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <h2 class="text-2xl font-bold mb-4">Sessions</h2>
+            <ul id="sessions-list" class="divide-y divide-gray-700 max-h-96 overflow-y-auto">
+                <!-- Session items will be injected here -->
+            </ul>
+            <div class="mt-4 flex flex-wrap justify-between gap-2">
+                <button id="import-session" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full">Import</button>
+                <button id="close-sessions" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="import-file-input" class="hidden" accept=".json">
+    <video id="video" class="hidden" autoplay muted></video>
+    <video id="thumbnail-video" class="hidden" muted></video>
+</body>
+</html>
