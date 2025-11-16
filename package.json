@@ -3,7 +3,8 @@
   "module": "server.ts",
   "type": "module",
   "scripts": {
-    "dev": "bun --hot server.ts"
+    "dev": "bun --hot server.ts",
+    "build": "bun build main.ts --outdir . --target browser --minify"
   },
   "devDependencies": {
     "@types/bun": "latest"

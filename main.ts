@@ -6,8 +6,7 @@ import { Annotation } from './annotation';
 const liveVideoElement = document.getElementById('video') as HTMLVideoElement;
 const delayedVideoElement = document.getElementById('delayed') as HTMLVideoElement;
 const toggleButton = document.getElementById('toggle') as HTMLButtonElement;
-toggleButton.disabled = true;
-toggleButton.textContent = 'Loading...';
+const recordingIndicator = document.getElementById('recording-indicator') as HTMLDivElement;
 
 const db = new DB('time-delay-db');
 let camera: Camera;
@@ -27,13 +26,21 @@ const sessionsList = document.getElementById('sessions-list') as HTMLUListElemen
 const closeSessionsButton = document.getElementById('close-sessions') as HTMLButtonElement;
 const importSessionButton = document.getElementById('import-session') as HTMLButtonElement;
 const importFileInput = document.getElementById('import-file-input') as HTMLInputElement;
+const setAButton = document.getElementById('set-a') as HTMLButtonElement;
+const setBButton = document.getElementById('set-b') as HTMLButtonElement;
+const toggleLoopButton = document.getElementById('toggle-loop') as HTMLButtonElement;
+const exportClipButton = document.getElementById('export-clip') as HTMLButtonElement;
+const lineColorInput = document.getElementById('line-color') as HTMLInputElement;
+const lineWidthInput = document.getElementById('line-width') as HTMLInputElement;
+const undoAnnotationButton = document.getElementById('undo-annotation') as HTMLButtonElement;
+const redoAnnotationButton = document.getElementById('redo-annotation') as HTMLButtonElement;
 
 let isCameraStarted = false;
 
 window.addEventListener('load', async () => {
     await db.open();
     toggleButton.disabled = false;
-    toggleButton.textContent = 'Start Camera';
+    toggleButton.innerHTML = '<i class="fas fa-video"></i> Start Recording';
     annotation = new Annotation(annotationCanvas);
     annotation.onDrawingEnd = (data) => {
         if (currentSessionId) {
@@ -45,15 +52,38 @@ window.addEventListener('load', async () => {
             loadAnnotations(currentSessionId, delayedVideoElement.currentTime);
         }
     });
+
+    // Update play/pause icon on video events
+    delayedVideoElement.addEventListener('play', () => {
+        playPauseButton.innerHTML = '<i class="fas fa-pause"></i>';
+    });
+    delayedVideoElement.addEventListener('pause', () => {
+        playPauseButton.innerHTML = '<i class="fas fa-play"></i>';
+    });
+
     loadSessionsList();
+
+    // Annotation tool event listeners
+    lineColorInput.addEventListener('input', (e) => {
+        annotation.setLineColor((e.target as HTMLInputElement).value);
+    });
+    lineWidthInput.addEventListener('input', (e) => {
+        annotation.setLineWidth(parseInt((e.target as HTMLInputElement).value));
+    });
+    undoAnnotationButton.addEventListener('click', () => {
+        annotation.undo();
+    });
+    redoAnnotationButton.addEventListener('click', () => {
+        annotation.redo();
+    });
 });
 
 async function loadAnnotations(sessionId: string, timestamp: number) {
     await db.getAnnotationsForTimestamp(sessionId, timestamp, (annotations) => {
         annotation.clear();
         if (annotations.length > 0) {
-            // For simplicity, load the first annotation found at this timestamp
-            annotation.loadDrawingData(annotations[0].data);
+            // Load all annotations for this timestamp as a drawing history
+            annotation.loadDrawingData(annotations);
         }
     });
 }
@@ -71,8 +101,8 @@ async function loadSessionsList() {
             sessionInfo.dataset.sessionId = session.id;
             
             const exportButton = document.createElement('button');
-            exportButton.className = 'bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-2 rounded';
-            exportButton.textContent = 'Export';
+            exportButton.className = 'bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-2 rounded ml-2';
+            exportButton.innerHTML = '<i class="fas fa-download"></i> Export';
             exportButton.dataset.exportSessionId = session.id;
 
             li.appendChild(sessionInfo);
@@ -133,8 +163,11 @@ async function importSession(data: any) {
         await db.addThumbnail(newSessionId, thumbnail.data);
     }
 
-    for (const annotation of data.annotations) {
-        await db.addAnnotation(newSessionId, annotation.timestamp, annotation.data);
+    for (const annotationEntry of data.annotations) {
+        // annotationEntry.data is now an array of drawing history entries
+        for (const drawingHistoryEntry of annotationEntry.data) {
+            await db.addAnnotation(newSessionId, annotationEntry.timestamp, drawingHistoryEntry);
+        }
     }
 
     loadSessionsList();
@@ -148,11 +181,12 @@ sessionsList.addEventListener('click', (e) => {
         if (isCameraStarted) {
             camera.stop();
             isCameraStarted = false;
-            toggleButton.textContent = 'Start Camera';
+            toggleButton.innerHTML = '<i class="fas fa-video"></i> Start Recording';
+            recordingIndicator.style.display = 'none';
         }
         player = new Player(delayedVideoElement, db, currentSessionId);
         const thumbnailTimeline = document.getElementById('thumbnail-timeline') as HTMLDivElement;
-        thumbnailTimeline.innerHTML = '';
+        thumbnailTimeline.innerHTML = '<div id="timeline-indicator"></div>'; // Clear previous thumbnails, keep indicator
         player.start();
         sessionsModal.classList.add('hidden');
     } else if (target.dataset.exportSessionId) {
@@ -206,7 +240,8 @@ async function exportSession(sessionId: string) {
 toggleButton?.addEventListener('click', async () => {
     if (isCameraStarted) {
         if (camera) camera.stop();
-        toggleButton.textContent = 'Start Camera';
+        toggleButton.innerHTML = '<i class="fas fa-video"></i> Start Recording';
+        recordingIndicator.style.display = 'none';
         isCameraStarted = false;
     } else {
         const sessionName = prompt("Enter session name:", `Session ${new Date().toLocaleString()}`);
@@ -214,16 +249,17 @@ toggleButton?.addEventListener('click', async () => {
             currentSessionId = Date.now().toString();
             await db.addSession({ id: currentSessionId, name: sessionName, createdAt: Date.now() });
             loadSessionsList();
-
             camera = new Camera(liveVideoElement, db, currentSessionId);
             player = new Player(delayedVideoElement, db, currentSessionId);
             
             const thumbnailTimeline = document.getElementById('thumbnail-timeline') as HTMLDivElement;
-            thumbnailTimeline.innerHTML = '';
-
+            thumbnailTimeline.innerHTML = '<div id="timeline-indicator"></div>'; // Clear previous thumbnails, keep indicator
+            
             await camera.start();
             player.start();
-            toggleButton.textContent = 'Stop Camera';
+
+            toggleButton.innerHTML = '<i class="fas fa-stop-circle"></i> Stop Recording';
+            recordingIndicator.style.display = 'block';
             isCameraStarted = true;
         }
     }
@@ -255,8 +291,75 @@ slowMotionButton?.addEventListener('click', () => {
     if (player) player.toggleSlowMotion();
 });
 
+setAButton?.addEventListener('click', () => {
+    if (player) {
+        player.setPointA(delayedVideoElement.currentTime);
+    }
+});
+
+setBButton?.addEventListener('click', () => {
+    if (player) {
+        player.setPointB(delayedVideoElement.currentTime);
+    }
+});
+
+toggleLoopButton?.addEventListener('click', () => {
+    if (player) {
+        player.toggleLoop();
+        if (player.loopEnabled) {
+            toggleLoopButton.classList.add('bg-teal-400'); // Highlight when active
+        } else {
+            toggleLoopButton.classList.remove('bg-teal-400');
+        }
+    }
+});
+
+exportClipButton?.addEventListener('click', async () => {
+    if (!player || player.pointA === null || player.pointB === null) {
+        alert('Please set both A and B points to export a clip.');
+        return;
+    }
+
+    console.log('Exporting clip...');
+    try {
+        const clipData = await player.getClipData(player.pointA, player.pointB);
+        
+        const blobToBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+
+        const chunksAsBase64 = await Promise.all(clipData.chunks.map(c => blobToBase64(c.data)));
+
+        const exportObject = {
+            chunks: clipData.chunks.map((c, i) => ({ ...c, data: chunksAsBase64[i] })),
+            thumbnails: clipData.thumbnails,
+            annotations: clipData.annotations
+        };
+
+        const json = JSON.stringify(exportObject, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `clip-${player.pointA}-${player.pointB}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        console.log('Clip export complete');
+
+    } catch (error) {
+        console.error('Clip export failed:', error);
+        alert('Failed to export clip. See console for details.');
+    }
+});
+
 frameBackwardButton?.addEventListener('click', () => {
     if (player) {
+        player.userPaused = true; // Pause when stepping
         player.frameStep('backward');
         if (currentSessionId) {
             loadAnnotations(currentSessionId, delayedVideoElement.currentTime);
@@ -266,6 +369,7 @@ frameBackwardButton?.addEventListener('click', () => {
 
 frameForwardButton?.addEventListener('click', () => {
     if (player) {
+        player.userPaused = true; // Pause when stepping
         player.frameStep('forward');
         if (currentSessionId) {
             loadAnnotations(currentSessionId, delayedVideoElement.currentTime);

@@ -1,16 +1,3 @@
-Uncaught TypeError: HTMLMediaElement.currentTime setter: Value being assigned is not a finite floating-point value.
-    handleTimelineSeek http://localhost:3000/main.js:173
-    Player http://localhost:3000/main.js:91
-    Player http://localhost:3000/main.js:91
-    <anonymous> http://localhost:3000/main.js:711
-    async* http://localhost:3000/main.js:698
-6 main.js:173:7
-    handleTimelineSeek http://localhost:3000/main.js:173
-    Player http://localhost:3000/main.js:91
-    (Async: EventListener.handleEvent)
-    Player http://localhost:3000/main.js:91
-    <anonymous> http://localhost:3000/main.js:711
-    InterpretGeneratorResume self-hosted:1332
-    AsyncFunctionNext self-hosted:800
-    (Async: async)
-    <anonymous> http://localhost:3000/main.js:698
+Player started main.js:242:13
+Source open main.js:146:13
+Polling for init segment...

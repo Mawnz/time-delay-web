@@ -1,5 +1,6 @@
 import { DB } from './db';
 import { generateThumbnail } from './thumbnail';
+import { MIME_TYPE } from './config';
 
 export class Camera {
     private stream: MediaStream | null = null;
@@ -9,28 +10,44 @@ export class Camera {
     constructor(private liveVideoElement: HTMLVideoElement, private db: DB, private sessionId: string) {}
 
     async start() {
-        this.stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        this.liveVideoElement.srcObject = this.stream;
-        this.mediaRecorder = new MediaRecorder(this.stream, { mimeType: 'video/webm; codecs="vp8"' });
-        this.mediaRecorder.ondataavailable = async (event) => {
-            if (event.data.size > 0) {
-                console.log('Chunk size:', event.data.size);
+        try {
+            this.stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            this.liveVideoElement.srcObject = this.stream;
+
+            if (!MediaRecorder.isTypeSupported(MIME_TYPE)) {
+                throw new Error(`Unsupported MIME type: ${MIME_TYPE}`);
+            }
+
+            this.mediaRecorder = new MediaRecorder(this.stream, { mimeType: MIME_TYPE });
+            this.mediaRecorder.ondataavailable = this.handleDataAvailable;
+            this.mediaRecorder.start(1000);
+            this.isFirstChunk = true; // Reset for new recording
+        } catch (error) {
+            console.error("Error starting camera:", error);
+            alert("Could not start camera. Please ensure you have given permission and are using a supported browser.");
+        }
+    }
+
+    private handleDataAvailable = async (event: BlobEvent) => {
+        if (event.data.size > 0) {
+            try {
                 if (this.isFirstChunk) {
                     await this.db.addInitializationSegment(this.sessionId, event.data);
                     this.isFirstChunk = false;
-                } else {
-                    this.db.addChunk(this.sessionId, event.data);
                 }
+                // Always add the data as a regular chunk
+                await this.db.addChunk(this.sessionId, event.data);
+                
                 const thumbnail = await generateThumbnail(this.liveVideoElement);
-                this.db.addThumbnail(this.sessionId, thumbnail);
+                await this.db.addThumbnail(this.sessionId, thumbnail);
+            } catch (error) {
+                console.error("Error handling data available:", error);
             }
-        };
-        this.mediaRecorder.start(1000);
-        this.isFirstChunk = true; // Reset for new recording
-    }
+        }
+    };
 
     stop() {
-        if (this.mediaRecorder) {
+        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
             this.mediaRecorder.stop();
         }
         if (this.stream) {

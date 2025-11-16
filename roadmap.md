@@ -1,28 +1,58 @@
-# Roadmap for Sports Analytics Tool
+# Revised Roadmap for Production-Ready Sports Analytics Tool
 
-## Current Project Alignment:
+This roadmap outlines the steps to evolve the Time Delay Video Playback application into a production-ready tool for elite athletes, focusing on usability, core functionality, and advanced analysis features.
 
-The application has a solid foundation with its core features: live camera capture, delayed playback, and a basic thumbnail-based seeking timeline. This aligns with the fundamental need for instant video feedback.
+## Phase 1: Production Readiness & Core Usability
 
-However, to evolve into a "sophisticated piece of analytics software," several areas need enhancement. The current implementation is more of a proof-of-concept for the delay mechanism rather than a persistent analysis tool. For example, recordings are not saved in distinct sessions and are cleared on restart.
+### 1.1 Secure Environment Setup (Mobile Access)
+*   **Objective:** Enable reliable camera access on mobile devices by ensuring the development environment supports HTTPS.
+*   **Tasks:**
+    *   Document the requirement for HTTPS for `getUserMedia()` on mobile browsers.
+    *   Provide guidance on setting up local development with HTTPS (e.g., using tools like ngrok or configuring a development server with SSL certificates).
 
-## Roadmap for Enhancement:
+### 1.2 UI/UX Refinement
+*   **Objective:** Enhance the user interface for clarity, intuitiveness, and ease of use, especially on touch devices.
+*   **Tasks:**
+    *   Replace text-based buttons (e.g., "Play/Pause", "Start Camera") with standard, universally recognized icons.
+    *   Implement clearer visual feedback for application states (e.g., distinct indicators for recording, playing, paused, buffering).
+    *   Develop a user-friendly error display system to communicate issues (e.g., "Camera permission denied", "Secure connection required") directly in the UI, rather than relying solely on console logs.
 
-Here is a proposed roadmap to better align the project with your goal:
+### 1.3 Production Build Process
+*   **Objective:** Establish a robust process for building and deploying the application efficiently.
+*   **Tasks:**
+    *   Add a production build script to `package.json` to bundle, minify, and optimize all assets (JavaScript, CSS, HTML) for deployment.
 
-1.  **Core Functionality and Performance:**
-    *   **Robust Playback Controls:** Implement standard and advanced playback controls: play/pause, slow-motion, and frame-by-frame stepping.
-    *   **Efficient Long-form Recording:** Optimize the recording and chunk-loading mechanism to handle long sessions without performance degradation.
-    *   **High-Precision Seeking:** Replace the thumbnail-only seeking with a high-precision timeline scrubber for exact navigation within the video.
+## Phase 2: Advanced Analysis Tools (Looping & Clipping)
 
-2.  **Session Management:**
-    *   **Persistent Sessions:** Introduce a session management system where each recording is saved as a distinct, named session in IndexedDB.
-    *   **Session Browser:** Create a user interface to list, load, rename, and delete saved sessions.
+### 2.1 Timeline Range Selection (A/B Points)
+*   **Objective:** Allow users to precisely select a specific segment of the video for focused analysis.
+*   **Tasks:**
+    *   Implement UI elements (e.g., draggable markers, dedicated buttons) to define a start-point ("A") and an end-point ("B") on the timeline.
+    *   Visually highlight the selected A-B range on the timeline to provide clear feedback to the user.
 
-3.  **Analytical Tools:**
-    *   **Video Annotation:** Add a drawing layer over the video to allow coaches and athletes to draw lines, angles, and other shapes for analysis.
-    *   **Annotation Persistence:** Save annotations as part of a session, so they can be reviewed later.
+### 2.2 Loop Playback Functionality
+*   **Objective:** Enable continuous, repetitive playback of a selected video segment.
+*   **Tasks:**
+    *   Add a "Loop" toggle button to the playback controls.
+    *   When activated, the video player should automatically loop playback exclusively within the currently defined A-B range.
 
-4.  **Advanced Features:**
-    *   **Data Export/Import:** Allow users to export sessions (video and annotations) to a file for backup or sharing, and import them back into the application.
-    *   **Multi-Angle Support:** (Future) Extend the system to support capturing and synchronizing video from multiple camera sources.
+### 2.3 Segment Export
+*   **Objective:** Provide the ability to export only the relevant portions of a recording.
+*   **Tasks:**
+    *   Create an "Export Clip" button.
+    *   Develop logic to export video chunks, associated thumbnails, and annotations that fall strictly within the selected A-B time range.
+    *   Ensure the exported data is packaged in a usable format (e.g., a single video file or a JSON structure similar to the full session export).
+
+## Phase 3: Final Polish & Performance
+
+### 3.1 Performance Optimization
+*   **Objective:** Ensure smooth performance and responsiveness, especially for long recording sessions.
+*   **Tasks:**
+    *   **Virtualized Timeline:** Implement a virtualized rendering strategy for the thumbnail timeline to efficiently display only the visible thumbnails, preventing DOM bloat and performance degradation for long sessions.
+    *   **Database Query Optimization:** Review and further optimize IndexedDB queries for large datasets to maintain responsiveness.
+
+### 3.2 Annotation Enhancements
+*   **Objective:** Expand the functionality and usability of the video annotation tools.
+*   **Tasks:**
+    *   Add options for users to select different drawing colors and line widths.
+    *   Implement an "undo" function for drawing actions on the canvas.

@@ -202,6 +202,45 @@ export class DB {
         });
     }
 
+    async getChunksBetween(sessionId: string, start: number, end: number): Promise<any[]> {
+        if (!this.db) throw new Error("DB not open");
+        const transaction = this.db.transaction(["chunks"], "readonly");
+        const store = transaction.objectStore("chunks");
+        const index = store.index('session_ts');
+        const range = IDBKeyRange.bound([sessionId, start], [sessionId, end]);
+        const request = index.getAll(range);
+        return new Promise((resolve, reject) => {
+            request.onerror = () => reject("Error getting chunks between timestamps");
+            request.onsuccess = (event) => resolve((event.target as IDBRequest).result);
+        });
+    }
+
+    async getThumbnailsBetween(sessionId: string, start: number, end: number): Promise<any[]> {
+        if (!this.db) throw new Error("DB not open");
+        const transaction = this.db.transaction(["thumbnails"], "readonly");
+        const store = transaction.objectStore("thumbnails");
+        const index = store.index('session_ts');
+        const range = IDBKeyRange.bound([sessionId, start], [sessionId, end]);
+        const request = index.getAll(range);
+        return new Promise((resolve, reject) => {
+            request.onerror = () => reject("Error getting thumbnails between timestamps");
+            request.onsuccess = (event) => resolve((event.target as IDBRequest).result);
+        });
+    }
+
+    async getAnnotationsBetween(sessionId: string, start: number, end: number): Promise<any[]> {
+        if (!this.db) throw new Error("DB not open");
+        const transaction = this.db.transaction(["annotations"], "readonly");
+        const store = transaction.objectStore("annotations");
+        const index = store.index('session_timestamp');
+        const range = IDBKeyRange.bound([sessionId, start], [sessionId, end]);
+        const request = index.getAll(range);
+        return new Promise((resolve, reject) => {
+            request.onerror = () => reject("Error getting annotations between timestamps");
+            request.onsuccess = (event) => resolve((event.target as IDBRequest).result);
+        });
+    }
+
     async addSession(session: { id: string, name: string, createdAt: number }) {
         return new Promise<void>((resolve, reject) => {
             if (!this.db) return reject("DB not open");
