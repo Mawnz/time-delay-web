@@ -148,6 +148,7 @@ export class Player {
         const indicatorPosition = percentage * scrollWidth;
 
         this.timelineIndicator.style.left = `${indicatorPosition}px`;
+        console.log(`Indicator: left = ${this.timelineIndicator.style.left}`);
 
         // If video is playing, adjust scroll to keep indicator in view
         if (!this.videoElement.paused) {
@@ -181,9 +182,14 @@ export class Player {
 
         const timelineWidth = this.thumbnailTimeline.scrollWidth;
 
-        this.timelineRangeHighlight.style.left = `${startPercentage * timelineWidth}px`;
-        this.timelineRangeHighlight.style.width = `${(endPercentage - startPercentage) * timelineWidth}px`;
+        const left = startPercentage * timelineWidth;
+        const width = (endPercentage - startPercentage) * timelineWidth;
+
+        this.timelineRangeHighlight.style.left = `${left}px`;
+        this.timelineRangeHighlight.style.width = `${width}px`;
         this.timelineRangeHighlight.style.display = 'block';
+
+        console.log(`Highlight: left = ${this.timelineRangeHighlight.style.left}, width = ${this.timelineRangeHighlight.style.width}`);
     }
 
     public setPointA(time: number) {

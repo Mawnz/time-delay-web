@@ -88,14 +88,22 @@ window.addEventListener('load', async () => {
     let startWidth = 0;
 
     createLoopButton?.addEventListener('click', () => {
-        if (!player || delayedVideoElement.seekable.length === 0) return;
+        console.log("Create Loop button clicked");
+        if (!player || delayedVideoElement.seekable.length === 0) {
+            console.log("Create Loop button: No player or not seekable.");
+            return;
+        }
         
         const seekableEnd = delayedVideoElement.seekable.end(delayedVideoElement.seekable.length - 1);
-        if (!isFinite(seekableEnd) || seekableEnd === 0) return;
+        if (!isFinite(seekableEnd) || seekableEnd === 0) {
+            console.log("Create Loop button: Not finite seekable end.");
+            return;
+        }
 
         // Create a default loop region (e.g., 20% to 80% of current duration)
         const pointATime = seekableEnd * 0.2;
         const pointBTime = seekableEnd * 0.8;
+        console.log(`Creating default loop from ${pointATime} to ${pointBTime}`);
         player.setPointA(pointATime);
         player.setPointB(pointBTime);
         timelineRangeHighlight.style.pointerEvents = 'auto'; // Make it interactive
