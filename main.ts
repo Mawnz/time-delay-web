@@ -26,7 +26,6 @@ const sessionsList = document.getElementById('sessions-list') as HTMLUListElemen
 const closeSessionsButton = document.getElementById('close-sessions') as HTMLButtonElement;
 const importSessionButton = document.getElementById('import-session') as HTMLButtonElement;
 const importFileInput = document.getElementById('import-file-input') as HTMLInputElement;
-const createLoopButton = document.getElementById('create-loop') as HTMLButtonElement;
 const toggleLoopButton = document.getElementById('toggle-loop') as HTMLButtonElement;
 const exportClipButton = document.getElementById('export-clip') as HTMLButtonElement;
 const lineColorInput = document.getElementById('line-color') as HTMLInputElement;
@@ -81,41 +80,6 @@ window.addEventListener('load', async () => {
     const thumbnailTimeline = document.getElementById('thumbnail-timeline') as HTMLDivElement;
 
     let isDragging = false;
-    let isResizing = false;
-    let activeHandle: 'left' | 'right' | null = null;
-    let startX = 0;
-    let startLeft = 0;
-    let startWidth = 0;
-
-    createLoopButton?.addEventListener('click', () => {
-        console.log("Create Loop button clicked");
-        if (!player || delayedVideoElement.seekable.length === 0) {
-            console.log("Create Loop button: No player or not seekable.");
-            return;
-        }
-        
-        const seekableEnd = delayedVideoElement.seekable.end(delayedVideoElement.seekable.length - 1);
-        if (!isFinite(seekableEnd) || seekableEnd === 0) {
-            console.log("Create Loop button: Not finite seekable end.");
-            return;
-        }
-
-        // Create a default loop region (e.g., 20% to 80% of current duration)
-        const pointATime = seekableEnd * 0.2;
-        const pointBTime = seekableEnd * 0.8;
-        console.log(`Creating default loop from ${pointATime} to ${pointBTime}`);
-        player.setPointA(pointATime);
-        player.setPointB(pointBTime);
-        timelineRangeHighlight.style.pointerEvents = 'auto'; // Make it interactive
-    });
-
-    timelineRangeHighlight.addEventListener('mousedown', (e) => {
-        if ((e.target as HTMLElement).classList.contains('resize-handle')) return;
-        e.preventDefault();
-        isDragging = true;
-        startX = e.clientX;
-        startLeft = timelineRangeHighlight.offsetLeft;
-    });
 
     Array.from(timelineRangeHighlight.children).forEach(handle => {
         handle.addEventListener('mousedown', (e) => {
@@ -276,7 +240,7 @@ sessionsList.addEventListener('click', (e) => {
         }
         player = new Player(delayedVideoElement, db, currentSessionId);
         const thumbnailTimeline = document.getElementById('thumbnail-timeline') as HTMLDivElement;
-        thumbnailTimeline.innerHTML = '<div id="timeline-indicator"></div>'; // Clear previous thumbnails, keep indicator
+        thumbnailTimeline.querySelectorAll('img').forEach(img => img.remove()); // Clear only thumbnails
         player.start();
         sessionsModal.classList.add('hidden');
     } else if (target.dataset.exportSessionId) {
@@ -343,7 +307,7 @@ toggleButton?.addEventListener('click', async () => {
             player = new Player(delayedVideoElement, db, currentSessionId);
             
             const thumbnailTimeline = document.getElementById('thumbnail-timeline') as HTMLDivElement;
-            thumbnailTimeline.innerHTML = '<div id="timeline-indicator"></div>'; // Clear previous thumbnails, keep indicator
+            thumbnailTimeline.querySelectorAll('img').forEach(img => img.remove()); // Clear only thumbnails
             
             await camera.start();
             player.start();

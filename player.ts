@@ -148,8 +148,7 @@ export class Player {
         const indicatorPosition = percentage * scrollWidth;
 
         this.timelineIndicator.style.left = `${indicatorPosition}px`;
-        console.log(`Indicator: left = ${this.timelineIndicator.style.left}`);
-
+        
         // If video is playing, adjust scroll to keep indicator in view
         if (!this.videoElement.paused) {
             const timelineWidth = this.thumbnailTimeline.clientWidth;
