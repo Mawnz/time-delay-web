@@ -41,3 +41,32 @@ This roadmap outlines the steps taken to evolve the Time Delay Video Playback ap
 ### 3.2 Annotation Enhancements (`✅ DONE`)
 *   **Objective:** Expand the functionality and usability of the video annotation tools.
 *   **Status:** The annotation tools now support changing line color and width, as well as undo/redo functionality.
+
+## Phase 4: Next-Generation Features (`PLANNED`)
+
+### 4.1 Advanced Timeline Control
+*   **Objective:** Overhaul the timeline to support advanced navigation and viewing options for professional-grade analysis.
+*   **Tasks:**
+    *   **Timeline Zoom:** Implement pinch-to-zoom and scroll-wheel zoom functionality on the timeline.
+    *   **Responsive Thumbnails:** Dynamically resize thumbnails based on the zoom level.
+    *   **Thumbnail Virtualization:** To maintain performance on long recordings, implement a strategy to only render necessary thumbnails (e.g., showing every Nth thumbnail when zoomed out).
+
+### 4.2 Enhanced Touch Experience
+*   **Objective:** Improve usability on touch devices by moving beyond standard browser controls.
+*   **Tasks:**
+    *   **Touch-Based Navigation:** Implement intuitive touch gestures for timeline interaction, such as two-finger panning and pinch-to-zoom.
+    *   **Refined Controls:** Review and adapt all controls for better ergonomics on touchscreens.
+
+### 4.3 Core Functionality Enhancements
+*   **Objective:** Add highly-requested features to improve the tool's utility and flexibility.
+*   **Tasks:**
+    *   **Video Clip Export:** Allow users to export the selected A-B loop area as a downloadable video file (e.g., MP4/WebM).
+    *   **Configurable Playback Delay:** Add a user setting to adjust the live playback delay (range: 5-120 seconds).
+    *   **"Snap to Live" Mode:**
+        *   Modify auto-scrolling to only occur when the user is scrolled to the far-right of the timeline.
+        *   Add a "Go Live" button to immediately jump playback to the live-delay point.
+
+### 4.4 Cross-Platform Deployment
+*   **Objective:** Package the web application for native mobile deployment, expanding its reach.
+*   **Tasks:**
+    *   **Capacitor Integration:** Integrate Capacitor to build and deploy the application as native iOS and Android apps from the existing web codebase.

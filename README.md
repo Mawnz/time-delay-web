@@ -4,38 +4,26 @@ This project is a web-based application that allows users to record video from t
 
 ## Features
 
-*   **Camera Recording:** The application can access the user's camera and record video sessions.
-*   **Time-Delayed Playback:** The recorded video is played back in a separate video element with a delay, allowing for immediate review.
-*   **Interactive Timeline:** A timeline of thumbnails is generated from the recorded video. Users can click or drag on the timeline to instantly seek to any point in the recorded video. The timeline auto-scrolls as the video plays.
-*   **Persistent Sessions:** Recordings are saved as sessions in the browser's IndexedDB. Users can name, save, load, and delete sessions.
-*   **Data Management:** Full sessions can be exported to and imported from JSON files, allowing for backup and sharing.
-*   **Advanced Playback Controls:** Includes Play/Pause, Slow Motion, and Frame-by-Frame stepping.
-*   **Looping:** A draggable and resizable selector can be created on the timeline to define a specific segment. This segment can then be looped repeatedly for focused analysis.
-*   **Clip Export:** The user-defined loop segment can be exported as a separate clip (in JSON format), containing only the video, thumbnails, and annotations for that specific time range.
-*   **Video Annotation:** Users can draw on the video when it is paused. Annotation tools include a color picker, line width slider, and undo/redo functionality. Annotations are saved with the session.
-*   **Responsive UI:** The user interface is designed to be mobile-first, with a full-screen video view and touch-friendly controls that appear on interaction.
+This application provides a comprehensive suite of tools for near-real-time video analysis, all running locally in the browser.
+
+*   **Time-Delayed Playback:** Record from your camera and watch a delayed feed, allowing for immediate performance review.
+*   **Session Management:** Save recordings as named sessions. Export and import sessions as JSON files for backup or sharing.
+*   **Interactive Timeline:** A thumbnail timeline allows for instant seeking to any point in the recording.
+*   **Advanced Analysis Tools:**
+    *   **Looping:** Create a draggable and resizable loop region on the timeline for focused, repetitive analysis.
+    *   **Annotation:** Pause the video and draw on the screen with tools for color, line width, and undo/redo. Annotations are saved with the session.
+    *   **Frame Control:** Play, pause, slow motion, and frame-by-frame stepping.
+*   **Clip Export:** Export the data for a selected loop region (video, thumbnails, annotations) as a JSON file.
+*   **Mobile Ready:** A responsive UI and guidance on using HTTPS (via ngrok) ensure full functionality on mobile devices.
+
+## Future Development
+
+The project is stable and feature-complete according to the initial roadmap. Future work is planned to introduce next-generation features, including advanced timeline controls (zooming), video clip exporting, and cross-platform deployment.
+
+For a high-level overview of upcoming features, see the [Project Roadmap](roadmap.md).
+For a detailed technical breakdown of the implementation strategy, see the [Implementation Plan](PLAN.md).
 
 ## Architecture
-
-The application is built with TypeScript and uses the following browser APIs:
-
-*   **`MediaDevices.getUserMedia()`:** To access the user's camera.
-*   **`MediaRecorder`:** To record the video from the camera into one-second chunks.
-*   **`IndexedDB`:** To store video chunks, thumbnails, annotations, and session metadata.
-*   **`MediaSource`:** To play back the recorded video in the `delayed` video element.
-
-The application is divided into the following modules:
-
-*   **`main.ts`:** The main entry point of the application. It initializes the other modules and handles all user interactions and UI logic.
-*   **`camera.ts`:** Handles the camera recording, including selecting a supported codec and saving video data to the database.
-*   **`player.ts`:** Handles the video playback, including the `MediaSource` setup, timeline management, seeking, and playback controls.
-*   **`db.ts`:** A wrapper around the IndexedDB API that provides a simple interface for all data storage and retrieval.
-*   **`annotation.ts`:** Manages the drawing canvas, including drawing history for undo/redo and tool settings.
-*   **`config.ts`:** Contains shared configuration, such as the video `MIME_TYPE`.
-
-## Current State
-
-The application is stable and feature-complete according to the project roadmap. All core functionalities, including recording, playback, session management, and the advanced analysis tools (looping, clipping, annotations), are fully implemented and working.
 
 ## Running on Mobile Devices (HTTPS Requirement)
 
