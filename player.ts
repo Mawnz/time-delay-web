@@ -12,7 +12,7 @@ export class Player {
     private userPaused = false;
     private pointA: number | null = null;
     private pointB: number | null = null;
-    private loopEnabled: boolean = false;
+    private _loopEnabled: boolean = false;
 
     private thumbnailTimeline: HTMLDivElement;
     private timelineIndicator: HTMLDivElement;
@@ -117,7 +117,7 @@ export class Player {
         this.userPaused = false;
         this.pointA = null;
         this.pointB = null;
-        this.loopEnabled = false; // Reset loop state
+        this._loopEnabled = false; // Reset loop state
         this.updateTimelineRangeHighlight(); // Clear any previous highlight
         setInterval(() => this.fetchNewChunks(), 1000);
         setInterval(() => this.fetchThumbnails(), 1000);
@@ -125,11 +125,11 @@ export class Player {
     }
 
     private handleTimeUpdate() {
-        if (this.loopEnabled && this.pointA !== null && this.pointB !== null) {
+        if (this._loopEnabled && this.pointA !== null && this.pointB !== null) {
             const startPoint = Math.min(this.pointA, this.pointB);
             const endPoint = Math.max(this.pointA, this.pointB);
 
-            if (this.videoElement.currentTime >= endPoint) {
+            if (this.videoElement.currentTime >= endPoint || this.videoElement.currentTime < startPoint) {
                 this.videoElement.currentTime = startPoint;
                 if (this.videoElement.paused && !this.userPaused) {
                     this.videoElement.play(); // Auto-play if not user-paused
@@ -187,8 +187,10 @@ export class Player {
         this.timelineRangeHighlight.style.left = `${left}px`;
         this.timelineRangeHighlight.style.width = `${width}px`;
         this.timelineRangeHighlight.style.display = 'block';
+    }
 
-        console.log(`Highlight: left = ${this.timelineRangeHighlight.style.left}, width = ${this.timelineRangeHighlight.style.width}`);
+    public get loopEnabled(): boolean {
+        return this._loopEnabled;
     }
 
     public setPointA(time: number) {
@@ -204,12 +206,60 @@ export class Player {
     public clearPoints() {
         this.pointA = null;
         this.pointB = null;
+        this._loopEnabled = false; // Also disable looping
         this.updateTimelineRangeHighlight();
     }
 
+    public setLoop(state: boolean) {
+        this._loopEnabled = state;
+        if (this._loopEnabled && this.pointA !== null && this.pointB !== null) {
+            const startPoint = Math.min(this.pointA, this.pointB);
+            this.videoElement.currentTime = startPoint;
+            this.bringLoopIntoView();
+        }
+    }
+
     public toggleLoop() {
-        this.loopEnabled = !this.loopEnabled;
-        console.log('Loop enabled:', this.loopEnabled);
+        this._loopEnabled = !this._loopEnabled;
+        console.log('Loop enabled:', this._loopEnabled);
+        if (this._loopEnabled && this.pointA !== null && this.pointB !== null) {
+            const startPoint = Math.min(this.pointA, this.pointB);
+            this.videoElement.currentTime = startPoint;
+            this.bringLoopIntoView();
+        }
+    }
+
+    private bringLoopIntoView() {
+        if (this.pointA === null || this.pointB === null || this.videoElement.seekable.length === 0) return;
+
+        const seekableEnd = this.videoElement.seekable.end(this.videoElement.seekable.length - 1);
+        if (!isFinite(seekableEnd) || seekableEnd === 0) return;
+
+        const startPoint = Math.min(this.pointA, this.pointB);
+        const endPoint = Math.max(this.pointA, this.pointB);
+
+        const startPercentage = startPoint / seekableEnd;
+        const endPercentage = endPoint / seekableEnd;
+
+        const timelineScrollWidth = this.thumbnailTimeline.scrollWidth;
+        const timelineClientWidth = this.thumbnailTimeline.clientWidth;
+
+        const highlightLeft = startPercentage * timelineScrollWidth;
+        const highlightWidth = (endPercentage - startPercentage) * timelineScrollWidth;
+
+        // Center the highlight in the viewport
+        const highlightCenter = highlightLeft + highlightWidth / 2;
+        let targetScrollLeft = highlightCenter - timelineClientWidth / 2;
+
+        // Clamp the scroll position to valid bounds
+        const maxScroll = timelineScrollWidth - timelineClientWidth;
+        targetScrollLeft = Math.max(0, Math.min(targetScrollLeft, maxScroll));
+
+        // Apply the scroll smoothly
+        this.thumbnailTimeline.scrollTo({
+            left: targetScrollLeft,
+            behavior: 'smooth'
+        });
     }
 
     public async getClipData(start: number, end: number) {

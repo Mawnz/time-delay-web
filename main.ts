@@ -80,6 +80,89 @@ window.addEventListener('load', async () => {
     const thumbnailTimeline = document.getElementById('thumbnail-timeline') as HTMLDivElement;
 
     let isDragging = false;
+    let isResizing = false;
+    let activeHandle: 'left' | 'right' | null = null;
+    let startX = 0;
+    let startLeft = 0;
+    let startWidth = 0;
+
+    function handleCreateLoop(event: MouseEvent | Touch) {
+        event.preventDefault(); // For contextmenu and to prevent other actions
+
+        if (!player || delayedVideoElement.seekable.length === 0) return;
+
+        const seekableEnd = delayedVideoElement.seekable.end(delayedVideoElement.seekable.length - 1);
+        if (!isFinite(seekableEnd) || seekableEnd === 0) return;
+
+        const timelineRect = thumbnailTimeline.getBoundingClientRect();
+        const clientX = event.clientX; // Works for both MouseEvent and Touch
+        const clickX = clientX - timelineRect.left;
+        const scrollX = thumbnailTimeline.scrollLeft;
+        const scrollWidth = thumbnailTimeline.scrollWidth;
+
+        if (scrollWidth === 0) return;
+
+        const clickPercentage = (clickX + scrollX) / scrollWidth;
+        const centerTime = seekableEnd * clickPercentage;
+
+        const loopDuration = 5; // 5 seconds
+        let pointA = centerTime - (loopDuration / 2);
+        let pointB = centerTime + (loopDuration / 2);
+
+        // Clamp to video bounds
+        if (pointA < 0) {
+            pointA = 0;
+            pointB = Math.min(loopDuration, seekableEnd);
+        }
+        if (pointB > seekableEnd) {
+            pointB = seekableEnd;
+            pointA = Math.max(0, seekableEnd - loopDuration);
+        }
+
+        player.setPointA(pointA);
+        player.setPointB(pointB);
+        player.setLoop(true); // Enable loop by default
+        
+        // Update button state
+        toggleLoopButton.classList.add('bg-sky-500');
+        toggleLoopButton.classList.remove('bg-teal-600', 'hover:bg-teal-700');
+
+        delayedVideoElement.currentTime = centerTime; // Jump to the center of the new loop
+        if (delayedVideoElement.paused) {
+            player.togglePlayPause();
+        }
+
+        timelineRangeHighlight.style.pointerEvents = 'auto'; // Make it interactive
+    }
+
+    // Right-click to create loop
+    thumbnailTimeline.addEventListener('contextmenu', (e) => handleCreateLoop(e));
+
+    // Long-press to create loop
+    let longPressTimer: number;
+    thumbnailTimeline.addEventListener('touchstart', (e) => {
+        longPressTimer = window.setTimeout(() => {
+            if (e.touches.length === 1) { // Ensure it's a single touch
+                handleCreateLoop(e.touches[0]);
+            }
+        }, 500); // 500ms for long press
+    }, { passive: true });
+
+    thumbnailTimeline.addEventListener('touchend', () => {
+        clearTimeout(longPressTimer);
+    });
+
+    thumbnailTimeline.addEventListener('touchmove', () => {
+        clearTimeout(longPressTimer); // Cancel long press if finger moves
+    });
+
+    timelineRangeHighlight.addEventListener('mousedown', (e) => {
+        if ((e.target as HTMLElement).classList.contains('resize-handle')) return;
+        e.preventDefault();
+        isDragging = true;
+        startX = e.clientX;
+        startLeft = timelineRangeHighlight.offsetLeft;
+    });
 
     Array.from(timelineRangeHighlight.children).forEach(handle => {
         handle.addEventListener('mousedown', (e) => {
@@ -349,10 +432,21 @@ toggleLoopButton?.addEventListener('click', () => {
     if (player) {
         player.toggleLoop();
         if (player.loopEnabled) {
-            toggleLoopButton.classList.add('bg-teal-400'); // Highlight when active
+            toggleLoopButton.classList.add('bg-sky-500');
+            toggleLoopButton.classList.remove('bg-teal-600', 'hover:bg-teal-700');
         } else {
-            toggleLoopButton.classList.remove('bg-teal-400');
+            toggleLoopButton.classList.remove('bg-sky-500');
+            toggleLoopButton.classList.add('bg-teal-600', 'hover:bg-teal-700');
         }
+    }
+});
+
+timelineRangeHighlight.addEventListener('dblclick', () => {
+    if (player) {
+        player.clearPoints();
+        // Ensure button state is updated when loop is cleared
+        toggleLoopButton.classList.remove('bg-sky-500');
+        toggleLoopButton.classList.add('bg-teal-600', 'hover:bg-teal-700');
     }
 });
 
