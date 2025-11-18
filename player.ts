@@ -1,5 +1,6 @@
 import { DB } from './db';
 import { MIME_TYPE } from './config';
+import { TimelineManager } from './timeline-manager';
 
 export class Player {
     private mediaSource: MediaSource;
@@ -8,49 +9,43 @@ export class Player {
     private isAppending = false;
     private lastChunkTimestamp = 0;
     private initializationSegmentAppended: boolean = false;
-    private lastThumbnailTimestamp = 0;
-    private userPaused = false;
-    private pointA: number | null = null;
-    private pointB: number | null = null;
+    public userPaused = false;
+    public pointA: number | null = null;
+    public pointB: number | null = null;
     private _loopEnabled: boolean = false;
 
-    private thumbnailTimeline: HTMLDivElement;
-    private timelineIndicator: HTMLDivElement;
-    private timelineRangeHighlight: HTMLDivElement;
-    
-        constructor(private videoElement: HTMLVideoElement, private db: DB, private sessionId: string) {
-            this.mediaSource = new MediaSource();
-            this.videoElement.src = URL.createObjectURL(this.mediaSource);
-            this.mediaSource.addEventListener('sourceopen', () => this.onSourceOpen());
-            this.mediaSource.addEventListener('sourceended', () => console.log('MediaSource ended'));
-            this.mediaSource.addEventListener('sourceclose', () => console.log('MediaSource closed'));
-            this.videoElement.addEventListener('error', (e) => console.error('Video Element Error:', e));
-            this.videoElement.addEventListener('stalled', (e) => console.log('Video Element Stalled:', e));
-            this.videoElement.addEventListener('timeupdate', () => this.handleTimeUpdate());
+    public timelineManager: TimelineManager;
 
-            this.thumbnailTimeline = document.getElementById('thumbnail-timeline') as HTMLDivElement;
-            this.timelineIndicator = document.getElementById('timeline-indicator') as HTMLDivElement;
-            this.timelineRangeHighlight = document.getElementById('timeline-range-highlight') as HTMLDivElement;
-            this.thumbnailTimeline.addEventListener('click', (e) => this.handleTimelineSeek(e));
-            this.thumbnailTimeline.addEventListener('touchmove', (e) => {
-                e.preventDefault(); // Prevent scrolling while seeking
-                this.handleTimelineSeek(e.touches[0])
-            });
+    constructor(private videoElement: HTMLVideoElement, private db: DB, private sessionId: string) {
+        this.mediaSource = new MediaSource();
+        this.videoElement.src = URL.createObjectURL(this.mediaSource);
+        this.mediaSource.addEventListener('sourceopen', () => this.onSourceOpen());
+        this.mediaSource.addEventListener('error', (e) => console.error('Video Element Error:', e));
+        this.videoElement.addEventListener('timeupdate', () => this.handleTimeUpdate());
 
-            this.initializationSegmentAppended = false; // Reset for new player instance
-        }
+        this.timelineManager = new TimelineManager(
+            'timeline-wrapper', 
+            db, 
+            sessionId,
+            (seekTime) => {
+                if (this.videoElement.seekable.length > 0) {
+                    this.userPaused = false;
+                    this.videoElement.currentTime = seekTime;
+                }
+            }
+        );
+
+        this.initializationSegmentAppended = false; 
+    }
+
     private onSourceOpen() {
-        console.log('Source open');
         if (MediaSource.isTypeSupported(MIME_TYPE)) {
             this.sourceBuffer = this.mediaSource.addSourceBuffer(MIME_TYPE);
             this.sourceBuffer.mode = 'sequence';
             this.sourceBuffer.addEventListener('updateend', () => {
                 this.isAppending = false;
-                // After any append, try to append the next chunk in the queue
                 this.tryAppendingChunk();
             });
-            this.sourceBuffer.addEventListener('error', (e) => console.error('SourceBuffer Error:', e));
-            this.sourceBuffer.addEventListener('abort', (e) => console.log('SourceBuffer Abort:', e));
         } else {
             console.error(`Unsupported codec: ${MIME_TYPE}`);
         }
@@ -60,20 +55,17 @@ export class Player {
         if (!this.sourceBuffer) return;
 
         if (!this.initializationSegmentAppended) {
-            console.log('Polling for init segment...');
             const initSegment = await this.db.getInitializationSegment(this.sessionId);
             if (initSegment) {
-                console.log('Found init segment.');
                 this.initializationSegmentAppended = true;
                 const buffer = await initSegment.arrayBuffer();
                 this.chunkQueue.push(buffer);
                 this.tryAppendingChunk();
             } else {
-                return; // If still no init segment, wait for next tick.
+                return; 
             }
         }
 
-        // Now, fetch media chunks.
         this.db.getChunksAfter(this.sessionId, this.lastChunkTimestamp, async (chunk, timestamp) => {
             this.lastChunkTimestamp = timestamp;
             const buffer = await chunk.arrayBuffer();
@@ -88,7 +80,6 @@ export class Player {
             const buffer = this.chunkQueue.shift()!;
             try {
                 this.sourceBuffer.appendBuffer(buffer);
-                // Only auto-play if the user hasn't explicitly paused
                 if (this.videoElement.paused && !this.userPaused) {
                     this.videoElement.play();
                 }
@@ -99,29 +90,41 @@ export class Player {
         }
     }
 
-    private fetchThumbnails() {
-        this.db.getThumbnailsAfter(this.sessionId, this.lastThumbnailTimestamp, (thumbnail, timestamp) => {
-            this.lastThumbnailTimestamp = timestamp;
-            const img = document.createElement('img');
-            img.src = thumbnail;
-            img.dataset.timestamp = timestamp.toString();
-            img.className = 'inline-block h-full w-auto mr-1';
-            this.thumbnailTimeline.appendChild(img);
-        });
-    }
-
-    start() {
+    async start() {
         console.log('Player started');
+        
+        // NEW: Fetch session start time to sync thumbnails
+        const session = await this.db.getSession(this.sessionId);
+        if (session) {
+            this.timelineManager.setSessionStartTime(session.createdAt);
+        }
+
         this.lastChunkTimestamp = 0;
-        this.lastThumbnailTimestamp = 0;
         this.userPaused = false;
         this.pointA = null;
         this.pointB = null;
-        this._loopEnabled = false; // Reset loop state
-        this.updateTimelineRangeHighlight(); // Clear any previous highlight
+        this._loopEnabled = false; 
+        
+        this.timelineManager.updateRangeHighlight(null, null);
+
         setInterval(() => this.fetchNewChunks(), 1000);
-        setInterval(() => this.fetchThumbnails(), 1000);
-        setInterval(() => this.updateTimelineIndicator(), 100);
+        
+        const updateUI = () => {
+            if(this.videoElement) {
+                const duration = this.getDuration();
+                this.timelineManager.updateDuration(duration);
+                this.timelineManager.updateIndicator(this.videoElement.currentTime);
+            }
+            requestAnimationFrame(updateUI);
+        };
+        requestAnimationFrame(updateUI);
+    }
+
+    private getDuration(): number {
+        if (this.videoElement.seekable.length > 0) {
+            return this.videoElement.seekable.end(this.videoElement.seekable.length - 1);
+        }
+        return 0;
     }
 
     private handleTimeUpdate() {
@@ -132,82 +135,30 @@ export class Player {
             if (this.videoElement.currentTime >= endPoint || this.videoElement.currentTime < startPoint) {
                 this.videoElement.currentTime = startPoint;
                 if (this.videoElement.paused && !this.userPaused) {
-                    this.videoElement.play(); // Auto-play if not user-paused
+                    this.videoElement.play(); 
                 }
             }
         }
     }
 
-    private updateTimelineIndicator() {
-        if (this.videoElement.seekable.length === 0) return;
-        const seekableEnd = this.videoElement.seekable.end(this.videoElement.seekable.length - 1);
-        if (!isFinite(seekableEnd) || seekableEnd === 0) return;
-
-        const percentage = this.videoElement.currentTime / seekableEnd;
-        const scrollWidth = this.thumbnailTimeline.scrollWidth;
-        const indicatorPosition = percentage * scrollWidth;
-
-        this.timelineIndicator.style.left = `${indicatorPosition}px`;
-        
-        // If video is playing, adjust scroll to keep indicator in view
-        if (!this.videoElement.paused) {
-            const timelineWidth = this.thumbnailTimeline.clientWidth;
-            const scrollMargin = timelineWidth * 0.8; // Start scrolling when indicator passes 80% of the view
-            const indicatorVisiblePosition = indicatorPosition - this.thumbnailTimeline.scrollLeft;
-
-            if (indicatorVisiblePosition > scrollMargin) {
-                // Smoothly scroll to keep the indicator around the 80% mark
-                const targetScrollLeft = indicatorPosition - scrollMargin;
-                this.thumbnailTimeline.scrollLeft += (targetScrollLeft - this.thumbnailTimeline.scrollLeft) * 0.2;
-            }
-        }
-        this.updateTimelineRangeHighlight();
-    }
-
-    private updateTimelineRangeHighlight() {
-        if (this.pointA === null || this.pointB === null || this.videoElement.seekable.length === 0) {
-            this.timelineRangeHighlight.style.display = 'none';
-            return;
-        }
-
-        const seekableEnd = this.videoElement.seekable.end(this.videoElement.seekable.length - 1);
-        if (!isFinite(seekableEnd) || seekableEnd === 0) return;
-
-        const startPoint = Math.min(this.pointA, this.pointB);
-        const endPoint = Math.max(this.pointA, this.pointB);
-
-        const startPercentage = startPoint / seekableEnd;
-        const endPercentage = endPoint / seekableEnd;
-
-        const timelineWidth = this.thumbnailTimeline.scrollWidth;
-
-        const left = startPercentage * timelineWidth;
-        const width = (endPercentage - startPercentage) * timelineWidth;
-
-        this.timelineRangeHighlight.style.left = `${left}px`;
-        this.timelineRangeHighlight.style.width = `${width}px`;
-        this.timelineRangeHighlight.style.display = 'block';
-    }
-
-    public get loopEnabled(): boolean {
-        return this._loopEnabled;
-    }
-
+    // ... (Pass-through methods used by main.ts)
+    public get loopEnabled(): boolean { return this._loopEnabled; }
+    
     public setPointA(time: number) {
         this.pointA = time;
-        this.updateTimelineRangeHighlight();
+        this.timelineManager.updateRangeHighlight(this.pointA, this.pointB);
     }
 
     public setPointB(time: number) {
         this.pointB = time;
-        this.updateTimelineRangeHighlight();
+        this.timelineManager.updateRangeHighlight(this.pointA, this.pointB);
     }
 
     public clearPoints() {
         this.pointA = null;
         this.pointB = null;
-        this._loopEnabled = false; // Also disable looping
-        this.updateTimelineRangeHighlight();
+        this._loopEnabled = false; 
+        this.timelineManager.updateRangeHighlight(null, null);
     }
 
     public setLoop(state: boolean) {
@@ -221,7 +172,6 @@ export class Player {
 
     public toggleLoop() {
         this._loopEnabled = !this._loopEnabled;
-        console.log('Loop enabled:', this._loopEnabled);
         if (this._loopEnabled && this.pointA !== null && this.pointB !== null) {
             const startPoint = Math.min(this.pointA, this.pointB);
             this.videoElement.currentTime = startPoint;
@@ -230,75 +180,42 @@ export class Player {
     }
 
     private bringLoopIntoView() {
-        if (this.pointA === null || this.pointB === null || this.videoElement.seekable.length === 0) return;
-
-        const seekableEnd = this.videoElement.seekable.end(this.videoElement.seekable.length - 1);
-        if (!isFinite(seekableEnd) || seekableEnd === 0) return;
-
+        if (this.pointA === null || this.pointB === null) return;
+        
         const startPoint = Math.min(this.pointA, this.pointB);
         const endPoint = Math.max(this.pointA, this.pointB);
-
-        const startPercentage = startPoint / seekableEnd;
-        const endPercentage = endPoint / seekableEnd;
-
-        const timelineScrollWidth = this.thumbnailTimeline.scrollWidth;
-        const timelineClientWidth = this.thumbnailTimeline.clientWidth;
-
-        const highlightLeft = startPercentage * timelineScrollWidth;
-        const highlightWidth = (endPercentage - startPercentage) * timelineScrollWidth;
-
-        // Center the highlight in the viewport
-        const highlightCenter = highlightLeft + highlightWidth / 2;
-        let targetScrollLeft = highlightCenter - timelineClientWidth / 2;
-
-        // Clamp the scroll position to valid bounds
-        const maxScroll = timelineScrollWidth - timelineClientWidth;
-        targetScrollLeft = Math.max(0, Math.min(targetScrollLeft, maxScroll));
-
-        // Apply the scroll smoothly
-        this.thumbnailTimeline.scrollTo({
-            left: targetScrollLeft,
+        const centerTime = (startPoint + endPoint) / 2;
+        
+        const centerPixel = this.timelineManager.timeToPixel(centerTime);
+        const wrapper = this.timelineManager.getWrapper();
+        const halfViewport = wrapper.clientWidth / 2;
+        
+        wrapper.scrollTo({
+            left: centerPixel - halfViewport,
             behavior: 'smooth'
         });
     }
 
     public async getClipData(start: number, end: number) {
-        if (!this.sessionId) throw new Error("No active session to export clip from.");
-        if (start === null || end === null) throw new Error("A/B points must be set to export a clip.");
-
+        if (!this.sessionId) throw new Error("No active session.");
         const clipStart = Math.min(start, end);
         const clipEnd = Math.max(start, end);
+        
+        // Helper to convert video time to DB time
+        const session = await this.db.getSession(this.sessionId);
+        if(!session) throw new Error("Session not found");
+        
+        const dbStart = session.createdAt + (clipStart * 1000);
+        const dbEnd = session.createdAt + (clipEnd * 1000);
 
         const [chunks, thumbnails, annotations] = await Promise.all([
-            this.db.getChunksBetween(this.sessionId, clipStart, clipEnd),
-            this.db.getThumbnailsBetween(this.sessionId, clipStart, clipEnd),
-            this.db.getAnnotationsBetween(this.sessionId, clipStart, clipEnd)
+            // Note: chunks might need different logic if they strictly use timestamps
+            this.db.getChunksBetween(this.sessionId, dbStart, dbEnd),
+            this.db.getThumbnailsBetween(this.sessionId, dbStart, dbEnd),
+            this.db.getAnnotationsBetween(this.sessionId, clipStart, clipEnd) // Annotations use Video Time
         ]);
 
         return { chunks, thumbnails, annotations };
-    }
-
-    private handleTimelineSeek(event: MouseEvent | Touch) {
-        if (this.videoElement.seekable.length === 0) return;
-
-        const seekableEnd = this.videoElement.seekable.end(this.videoElement.seekable.length - 1);
-        if (!isFinite(seekableEnd)) return;
-    
-        const timelineRect = this.thumbnailTimeline.getBoundingClientRect();
-        const clickX = event.clientX - timelineRect.left;
-        const scrollX = this.thumbnailTimeline.scrollLeft;
-        const scrollWidth = this.thumbnailTimeline.scrollWidth;
-    
-        // Prevent division by zero if scrollWidth is not yet set
-        if (scrollWidth === 0) return;
-
-        const seekPercentage = (clickX + scrollX) / scrollWidth;
-        const seekTime = seekableEnd * seekPercentage;
-    
-        if (isFinite(seekTime)) {
-            this.userPaused = false; // Assume user wants to play after seeking
-            this.videoElement.currentTime = seekTime;
-        }
     }
 
     togglePlayPause() {
@@ -322,8 +239,7 @@ export class Player {
     frameStep(direction: 'forward' | 'backward') {
         this.userPaused = true;
         this.videoElement.pause();
-        const frameRate = 30; // Assuming 30fps
-        const step = 1 / frameRate;
+        const step = 1 / 30;
         if (direction === 'forward') {
             this.videoElement.currentTime += step;
         } else {

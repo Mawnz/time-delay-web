@@ -1,6 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delay Player</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="/cdn-proxy/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+    <script src="/cdn-proxy/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+    
     <script type="module" src="main.js"></script>
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
     <style>
         body {
             overscroll-behavior: none;
@@ -15,12 +28,26 @@
             opacity: 1;
             visibility: visible;
         }
+        #timeline-wrapper {
+            scrollbar-width: thin;
+            scrollbar-color: #4b5563 transparent;
+        }
+        #timeline-wrapper::-webkit-scrollbar {
+            height: 6px;
+        }
+        #timeline-wrapper::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        #timeline-wrapper::-webkit-scrollbar-thumb {
+            background-color: #4b5563;
+            border-radius: 20px;
+        }
         #timeline-indicator {
             position: absolute;
             top: 0;
             bottom: 0;
-            width: 3px;
-            background-color: #ef4444; /* Red-500 */
+            width: 2px;
+            background-color: #ef4444;
             pointer-events: none;
             z-index: 30;
         }
@@ -28,18 +55,19 @@
             position: absolute;
             top: 0;
             height: 100%;
-            background-color: rgba(56, 189, 248, 0.4); /* sky-400 at 40% opacity */
-            border-left: 2px solid #0ea5e9; /* sky-500 */
-            border-right: 2px solid #0ea5e9; /* sky-500 */
+            background-color: rgba(56, 189, 248, 0.4);
+            border-left: 2px solid #0ea5e9;
+            border-right: 2px solid #0ea5e9;
             cursor: move;
             z-index: 20;
+            display: none;
         }
         .resize-handle {
             position: absolute;
             top: 0;
             width: 10px;
             height: 100%;
-            background-color: rgba(14, 165, 233, 0.7); /* sky-500 at 70% opacity */
+            background-color: rgba(14, 165, 233, 0.7);
             cursor: col-resize;
             border-left: 1px solid rgba(255, 255, 255, 0.7);
             border-right: 1px solid rgba(255, 255, 255, 0.7);
@@ -54,66 +82,56 @@
 </head>
 <body class="bg-black text-white flex flex-col items-center justify-center">
 
-    <!-- Main Video and Controls Container -->
     <div class="relative video-container">
         <video id="delayed" class="w-full h-full object-contain" autoplay></video>
         <canvas id="annotation-canvas" class="absolute top-0 left-0 w-full h-full" style="pointer-events: none;"></canvas>
-        <div id="recording-indicator" class="hidden">REC</div>
+        <div id="recording-indicator" class="hidden absolute top-4 right-4 bg-red-600 text-white px-2 py-1 rounded animate-pulse font-bold">REC</div>
 
-        <!-- Controls Overlay -->
         <div class="controls-overlay absolute bottom-0 left-0 right-0 p-2 sm:p-4 bg-gradient-to-t from-black via-black/70 to-transparent opacity-0 visibility-hidden transition-all duration-300">
             
-            <!-- Thumbnail Timeline -->
-            <div id="thumbnail-timeline" class="relative w-full h-16 sm:h-24 bg-gray-900/50 overflow-x-auto whitespace-nowrap cursor-pointer rounded-lg border-2 border-transparent hover:border-gray-700">
-                <div id="timeline-indicator"></div>
-                <div id="timeline-range-highlight" class="absolute top-0 h-full bg-blue-500 opacity-30 pointer-events-none hidden">
-                    <div class="resize-handle left"></div>
-                    <div class="resize-handle right"></div>
+            <div id="timeline-wrapper" class="relative w-full h-16 sm:h-24 bg-gray-900/50 overflow-x-auto overflow-y-hidden cursor-pointer rounded-lg border-2 border-transparent hover:border-gray-700 select-none">
+                <div id="timeline-spacer" class="relative h-full min-w-full">
+                    <div id="thumbnails-container" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
+                    <div id="timeline-range-highlight">
+                        <div class="resize-handle left"></div>
+                        <div class="resize-handle right"></div>
+                    </div>
+                    <div id="timeline-indicator"></div>
                 </div>
             </div>
             
-            <!-- Buttons Container -->
             <div class="w-full flex flex-wrap justify-center items-center gap-2 sm:gap-4 mt-2">
-                <!-- Playback Buttons -->
                 <button id="play-pause" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-play"></i></button>
                 <button id="slow-motion" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-hourglass-half"></i> Slow-Mo</button>
                 <button id="frame-backward" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-step-backward"></i></button>
                 <button id="frame-forward" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-step-forward"></i></button>
-                
-                <!-- Loop Controls -->
                 <button id="toggle-loop" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-redo-alt"></i> Loop</button>
-
-                <!-- Spacer -->
                 <div class="w-px h-8 bg-gray-600 hidden sm:block"></div>
-
-                <!-- App Controls -->
                 <button id="toggle" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-video"></i> Start Recording</button>
                 <button id="sessions" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-folder-open"></i> Sessions</button>
-                <button id="export-clip" class="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-cut"></i> Export Clip</button>
+                
+                <button id="export-clip" class="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base transition-colors">
+                    <i class="fas fa-file-video"></i> Export MP4
+                </button>
+                
                 <button id="clear" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-trash-alt"></i> Clear All</button>
             </div>
 
-            <!-- Annotation Controls -->
             <div class="w-full flex flex-wrap justify-center items-center gap-2 sm:gap-4 mt-2">
                 <label for="line-color" class="text-white text-sm sm:text-base">Color:</label>
                 <input type="color" id="line-color" value="#ff0000" class="h-8 w-8 rounded-full cursor-pointer">
-                
                 <label for="line-width" class="text-white text-sm sm:text-base">Width:</label>
                 <input type="range" id="line-width" min="1" max="10" value="2" class="w-20 sm:w-24 cursor-pointer">
-                
                 <button id="undo-annotation" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-undo"></i> Undo</button>
                 <button id="redo-annotation" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full text-sm sm:text-base"><i class="fas fa-redo"></i> Redo</button>
             </div>
         </div>
     </div>
 
-    <!-- Session Modal -->
     <div id="sessions-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
         <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
             <h2 class="text-2xl font-bold mb-4">Sessions</h2>
-            <ul id="sessions-list" class="divide-y divide-gray-700 max-h-96 overflow-y-auto">
-                <!-- Session items will be injected here -->
-            </ul>
+            <ul id="sessions-list" class="divide-y divide-gray-700 max-h-96 overflow-y-auto"></ul>
             <div class="mt-4 flex flex-wrap justify-between gap-2">
                 <button id="import-session" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full"><i class="fas fa-file-import"></i> Import</button>
                 <button id="close-sessions" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full"><i class="fas fa-times"></i> Close</button>
@@ -123,6 +141,5 @@
 
     <input type="file" id="import-file-input" class="hidden" accept=".json">
     <video id="video" class="hidden" autoplay muted></video>
-    <video id="thumbnail-video" class="hidden" muted></video>
 </body>
 </html>

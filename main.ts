@@ -3,6 +3,11 @@ import { Player } from './player';
 import { DB } from './db';
 import { Annotation } from './annotation';
 
+// Define global FFmpeg types for TypeScript
+declare const FFmpegWASM: {
+    FFmpeg: any;
+};
+
 const liveVideoElement = document.getElementById('video') as HTMLVideoElement;
 const delayedVideoElement = document.getElementById('delayed') as HTMLVideoElement;
 const toggleButton = document.getElementById('toggle') as HTMLButtonElement;
@@ -35,6 +40,13 @@ const redoAnnotationButton = document.getElementById('redo-annotation') as HTMLB
 
 let isCameraStarted = false;
 
+// --- HELPER: Manually convert Blob to Uint8Array ---
+// This is more stable than using the FFmpegUtil fetchFile for dynamic blobs
+const blobToUint8Array = async (blob: Blob): Promise<Uint8Array> => {
+    const buffer = await blob.arrayBuffer();
+    return new Uint8Array(buffer);
+};
+
 window.addEventListener('load', async () => {
     await db.open();
     toggleButton.disabled = false;
@@ -51,7 +63,6 @@ window.addEventListener('load', async () => {
         }
     });
 
-    // Update play/pause icon on video events
     delayedVideoElement.addEventListener('play', () => {
         playPauseButton.innerHTML = '<i class="fas fa-pause"></i>';
     });
@@ -61,7 +72,6 @@ window.addEventListener('load', async () => {
 
     loadSessionsList();
 
-    // Annotation tool event listeners
     lineColorInput.addEventListener('input', (e) => {
         annotation.setLineColor((e.target as HTMLInputElement).value);
     });
@@ -75,9 +85,9 @@ window.addEventListener('load', async () => {
         annotation.redo();
     });
 
-    // Draggable Loop Selector Logic
+    // --- Loop / Timeline Logic ---
+    const timelineWrapper = document.getElementById('timeline-wrapper') as HTMLDivElement;
     const timelineRangeHighlight = document.getElementById('timeline-range-highlight') as HTMLDivElement;
-    const thumbnailTimeline = document.getElementById('thumbnail-timeline') as HTMLDivElement;
 
     let isDragging = false;
     let isResizing = false;
@@ -87,29 +97,24 @@ window.addEventListener('load', async () => {
     let startWidth = 0;
 
     function handleCreateLoop(event: MouseEvent | Touch) {
-        event.preventDefault(); // For contextmenu and to prevent other actions
+        event.preventDefault(); 
 
         if (!player || delayedVideoElement.seekable.length === 0) return;
 
         const seekableEnd = delayedVideoElement.seekable.end(delayedVideoElement.seekable.length - 1);
         if (!isFinite(seekableEnd) || seekableEnd === 0) return;
 
-        const timelineRect = thumbnailTimeline.getBoundingClientRect();
-        const clientX = event.clientX; // Works for both MouseEvent and Touch
+        const timelineRect = timelineWrapper.getBoundingClientRect();
+        const clientX = (event as any).clientX || (event as Touch).clientX;
         const clickX = clientX - timelineRect.left;
-        const scrollX = thumbnailTimeline.scrollLeft;
-        const scrollWidth = thumbnailTimeline.scrollWidth;
+        const scrollX = timelineWrapper.scrollLeft;
+        
+        const centerTime = player.timelineManager.pixelToTime(clickX + scrollX);
 
-        if (scrollWidth === 0) return;
-
-        const clickPercentage = (clickX + scrollX) / scrollWidth;
-        const centerTime = seekableEnd * clickPercentage;
-
-        const loopDuration = 5; // 5 seconds
+        const loopDuration = 5; 
         let pointA = centerTime - (loopDuration / 2);
         let pointB = centerTime + (loopDuration / 2);
 
-        // Clamp to video bounds
         if (pointA < 0) {
             pointA = 0;
             pointB = Math.min(loopDuration, seekableEnd);
@@ -121,40 +126,32 @@ window.addEventListener('load', async () => {
 
         player.setPointA(pointA);
         player.setPointB(pointB);
-        player.setLoop(true); // Enable loop by default
+        player.setLoop(true); 
         
-        // Update button state
         toggleLoopButton.classList.add('bg-sky-500');
         toggleLoopButton.classList.remove('bg-teal-600', 'hover:bg-teal-700');
 
-        delayedVideoElement.currentTime = centerTime; // Jump to the center of the new loop
+        delayedVideoElement.currentTime = centerTime; 
         if (delayedVideoElement.paused) {
             player.togglePlayPause();
         }
 
-        timelineRangeHighlight.style.pointerEvents = 'auto'; // Make it interactive
+        timelineRangeHighlight.style.pointerEvents = 'auto'; 
     }
 
-    // Right-click to create loop
-    thumbnailTimeline.addEventListener('contextmenu', (e) => handleCreateLoop(e));
+    timelineWrapper.addEventListener('contextmenu', (e) => handleCreateLoop(e));
 
-    // Long-press to create loop
     let longPressTimer: number;
-    thumbnailTimeline.addEventListener('touchstart', (e) => {
+    timelineWrapper.addEventListener('touchstart', (e) => {
         longPressTimer = window.setTimeout(() => {
-            if (e.touches.length === 1) { // Ensure it's a single touch
+            if (e.touches.length === 1) { 
                 handleCreateLoop(e.touches[0]);
             }
-        }, 500); // 500ms for long press
+        }, 500); 
     }, { passive: true });
 
-    thumbnailTimeline.addEventListener('touchend', () => {
-        clearTimeout(longPressTimer);
-    });
-
-    thumbnailTimeline.addEventListener('touchmove', () => {
-        clearTimeout(longPressTimer); // Cancel long press if finger moves
-    });
+    timelineWrapper.addEventListener('touchend', () => clearTimeout(longPressTimer));
+    timelineWrapper.addEventListener('touchmove', () => clearTimeout(longPressTimer));
 
     timelineRangeHighlight.addEventListener('mousedown', (e) => {
         if ((e.target as HTMLElement).classList.contains('resize-handle')) return;
@@ -176,34 +173,39 @@ window.addEventListener('load', async () => {
         });
     });
 
+    timelineRangeHighlight.addEventListener('dblclick', () => {
+        if (player) {
+            player.clearPoints();
+            toggleLoopButton.classList.remove('bg-sky-500');
+            toggleLoopButton.classList.add('bg-teal-600', 'hover:bg-teal-700');
+        }
+    });
+
     window.addEventListener('mousemove', (e) => {
         if (!player || (!isDragging && !isResizing)) return;
         e.preventDefault();
 
-        const seekableEnd = delayedVideoElement.seekable.end(delayedVideoElement.seekable.length - 1);
-        if (!isFinite(seekableEnd) || seekableEnd === 0) return;
-
-        const timelineRect = thumbnailTimeline.getBoundingClientRect();
-        const scrollWidth = thumbnailTimeline.scrollWidth;
+        const spacer = document.getElementById('timeline-spacer') as HTMLDivElement;
+        const scrollWidth = spacer.offsetWidth; 
         const dx = e.clientX - startX;
 
         if (isDragging) {
             const newLeft = Math.max(0, Math.min(startLeft + dx, scrollWidth - timelineRangeHighlight.offsetWidth));
-            const newStartPercentage = newLeft / scrollWidth;
-            const newEndPercentage = (newLeft + timelineRangeHighlight.offsetWidth) / scrollWidth;
+            const startTime = player.timelineManager.pixelToTime(newLeft);
+            const duration = player.timelineManager.pixelToTime(timelineRangeHighlight.offsetWidth);
             
-            player.setPointA(newStartPercentage * seekableEnd);
-            player.setPointB(newEndPercentage * seekableEnd);
+            player.setPointA(startTime);
+            player.setPointB(startTime + duration);
         } else if (isResizing) {
             if (activeHandle === 'left') {
-                const newWidth = Math.max(20, startWidth - dx);
                 const newLeft = Math.max(0, startLeft + dx);
-                const newStartPercentage = newLeft / scrollWidth;
-                player.setPointA(newStartPercentage * seekableEnd);
+                const startTime = player.timelineManager.pixelToTime(newLeft);
+                player.setPointA(startTime);
             } else if (activeHandle === 'right') {
                 const newWidth = Math.max(20, startWidth + dx);
-                const newEndPercentage = (startLeft + newWidth) / scrollWidth;
-                player.setPointB(newEndPercentage * seekableEnd);
+                const newRight = startLeft + newWidth;
+                const endTime = player.timelineManager.pixelToTime(newRight);
+                player.setPointB(endTime);
             }
         }
     });
@@ -219,7 +221,6 @@ async function loadAnnotations(sessionId: string, timestamp: number) {
     await db.getAnnotationsForTimestamp(sessionId, timestamp, (annotations) => {
         annotation.clear();
         if (annotations.length > 0) {
-            // Load all annotations for this timestamp as a drawing history
             annotation.loadDrawingData(annotations);
         }
     });
@@ -237,13 +238,7 @@ async function loadSessionsList() {
             sessionInfo.textContent = `${session.name} - ${new Date(session.createdAt).toLocaleString()}`;
             sessionInfo.dataset.sessionId = session.id;
             
-            const exportButton = document.createElement('button');
-            exportButton.className = 'bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-2 rounded ml-2';
-            exportButton.innerHTML = '<i class="fas fa-download"></i> Export';
-            exportButton.dataset.exportSessionId = session.id;
-
             li.appendChild(sessionInfo);
-            li.appendChild(exportButton);
             sessionsList.appendChild(li);
         });
     });
@@ -301,7 +296,6 @@ async function importSession(data: any) {
     }
 
     for (const annotationEntry of data.annotations) {
-        // annotationEntry.data is now an array of drawing history entries
         for (const drawingHistoryEntry of annotationEntry.data) {
             await db.addAnnotation(newSessionId, annotationEntry.timestamp, drawingHistoryEntry);
         }
@@ -322,57 +316,10 @@ sessionsList.addEventListener('click', (e) => {
             recordingIndicator.style.display = 'none';
         }
         player = new Player(delayedVideoElement, db, currentSessionId);
-        const thumbnailTimeline = document.getElementById('thumbnail-timeline') as HTMLDivElement;
-        thumbnailTimeline.querySelectorAll('img').forEach(img => img.remove()); // Clear only thumbnails
         player.start();
         sessionsModal.classList.add('hidden');
-    } else if (target.dataset.exportSessionId) {
-        exportSession(target.dataset.exportSessionId);
     }
 });
-
-async function exportSession(sessionId: string) {
-    console.log(`Exporting session: ${sessionId}`);
-    try {
-        const [session, chunks, thumbnails, annotations] = await Promise.all([
-            db.getSession(sessionId),
-            db.getAllChunksForSession(sessionId),
-            db.getAllThumbnailsForSession(sessionId),
-            db.getAllAnnotationsForSession(sessionId)
-        ]);
-
-        const blobToBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-
-        const chunksAsBase64 = await Promise.all(chunks.map(c => blobToBase64(c.data)));
-
-        const exportData = {
-            session,
-            chunks: chunks.map((c, i) => ({ ...c, data: chunksAsBase64[i] })),
-            thumbnails,
-            annotations
-        };
-
-        const json = JSON.stringify(exportData, null, 2);
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `session-${sessionId}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        console.log('Export complete');
-
-    } catch (error) {
-        console.error('Export failed:', error);
-    }
-}
 
 toggleButton?.addEventListener('click', async () => {
     if (isCameraStarted) {
@@ -388,9 +335,6 @@ toggleButton?.addEventListener('click', async () => {
             loadSessionsList();
             camera = new Camera(liveVideoElement, db, currentSessionId);
             player = new Player(delayedVideoElement, db, currentSessionId);
-            
-            const thumbnailTimeline = document.getElementById('thumbnail-timeline') as HTMLDivElement;
-            thumbnailTimeline.querySelectorAll('img').forEach(img => img.remove()); // Clear only thumbnails
             
             await camera.start();
             player.start();
@@ -441,61 +385,124 @@ toggleLoopButton?.addEventListener('click', () => {
     }
 });
 
-timelineRangeHighlight.addEventListener('dblclick', () => {
-    if (player) {
-        player.clearPoints();
-        // Ensure button state is updated when loop is cleared
-        toggleLoopButton.classList.remove('bg-sky-500');
-        toggleLoopButton.classList.add('bg-teal-600', 'hover:bg-teal-700');
-    }
-});
-
+// --- VIDEO EXPORT LOGIC (MEMORY MERGE STRATEGY) ---
 exportClipButton?.addEventListener('click', async () => {
-    if (!player || player.pointA === null || player.pointB === null) {
+    if (!player || player.pointA === null || player.pointB === null || !currentSessionId) {
         alert('Please set both A and B points to export a clip.');
         return;
     }
 
-    console.log('Exporting clip...');
+    const btn = exportClipButton;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Processing...';
+    btn.disabled = true;
+    btn.classList.add('opacity-50');
+
+    let ffmpeg: any = null;
+
+    console.log('Starting Video Export...');
     try {
+        // 1. Fetch the header (Init Segment)
+        const initSegmentBlob = await db.getInitializationSegment(currentSessionId);
+        if (!initSegmentBlob) {
+            throw new Error("Missing initialization segment.");
+        }
+        const initData = await blobToUint8Array(initSegmentBlob);
+
+        // 2. Get Raw Chunks
         const clipData = await player.getClipData(player.pointA, player.pointB);
+        if(clipData.chunks.length === 0) {
+            throw new Error("No video data found in selected range.");
+        }
+
+        // 3. MERGE CHUNKS IN MEMORY
+        console.log("Merging chunks into single binary stream...");
         
-        const blobToBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
+        const chunkBuffers = await Promise.all(
+            clipData.chunks.map(c => blobToUint8Array(c.data))
+        );
+
+        // Calculate total size
+        const totalSize = initData.length + chunkBuffers.reduce((acc, buf) => acc + buf.length, 0);
+        const mergedBuffer = new Uint8Array(totalSize);
+
+        // Append Header first
+        mergedBuffer.set(initData, 0);
+        let offset = initData.length;
+
+        // Append all Chunks sequentially
+        for (const buf of chunkBuffers) {
+            mergedBuffer.set(buf, offset);
+            offset += buf.length;
+        }
+
+        // 4. Load FFmpeg
+        const { FFmpeg } = (window as any).FFmpegWASM;
+        ffmpeg = new FFmpeg();
+        
+        ffmpeg.on('log', ({ message }: { message: string }) => {
+            console.log('FFmpeg Log:', message);
         });
 
-        const chunksAsBase64 = await Promise.all(clipData.chunks.map(c => blobToBase64(c.data)));
+        await ffmpeg.load({
+            coreURL: '/cdn-proxy/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js',
+            wasmURL: '/cdn-proxy/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.wasm',
+        });
 
-        const exportObject = {
-            chunks: clipData.chunks.map((c, i) => ({ ...c, data: chunksAsBase64[i] })),
-            thumbnails: clipData.thumbnails,
-            annotations: clipData.annotations
-        };
+        // 5. Write the Single Merged Source
+        // This creates a valid-ish WebM stream structure
+        await ffmpeg.writeFile('source.webm', mergedBuffer);
 
-        const json = JSON.stringify(exportObject, null, 2);
-        const blob = new Blob([json], { type: 'application/json' });
+        // 6. Run Transcode
+        // Critical Flags:
+        // -fflags +genpts: Regenerate Presentation Time Stamps to fix the freeze/gaps
+        // -ignore_unknown: Skip invalid data at start
+        // -c:v libx264: Re-encode to H.264 (Creates valid MP4 structure)
+        // -preset ultrafast: Speed
+        console.log("Transcoding to MP4...");
+        await ffmpeg.exec([
+            '-fflags', '+genpts', 
+            '-i', 'source.webm',
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast', 
+            'output.mp4'
+        ]);
+
+        // 7. Read & Download
+        const data = await ffmpeg.readFile('output.mp4');
+        const blob = new Blob([data], { type: 'video/mp4' });
         const url = URL.createObjectURL(blob);
+        
         const a = document.createElement('a');
         a.href = url;
-        a.download = `clip-${player.pointA}-${player.pointB}.json`;
+        a.download = `clip-${Date.now()}.mp4`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        console.log('Clip export complete');
+
+        console.log('Video Export complete');
 
     } catch (error) {
-        console.error('Clip export failed:', error);
-        alert('Failed to export clip. See console for details.');
+        console.error('Export failed:', error);
+        alert('Failed to export video. See console for details.');
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        btn.classList.remove('opacity-50');
+        
+        if (ffmpeg) {
+            try {
+                ffmpeg.terminate();
+                console.log('FFmpeg terminated.');
+            } catch (e) { console.warn(e); }
+        }
     }
 });
 
 frameBackwardButton?.addEventListener('click', () => {
     if (player) {
-        player.userPaused = true; // Pause when stepping
+        player.userPaused = true; 
         player.frameStep('backward');
         if (currentSessionId) {
             loadAnnotations(currentSessionId, delayedVideoElement.currentTime);
@@ -505,7 +512,7 @@ frameBackwardButton?.addEventListener('click', () => {
 
 frameForwardButton?.addEventListener('click', () => {
     if (player) {
-        player.userPaused = true; // Pause when stepping
+        player.userPaused = true; 
         player.frameStep('forward');
         if (currentSessionId) {
             loadAnnotations(currentSessionId, delayedVideoElement.currentTime);
