@@ -19,26 +19,30 @@ export class DB {
                 console.log('DB upgrade needed');
                 const db = (event.target as any).result;
 
-                // Nuke and pave for simplicity in this dev phase
-                if (db.objectStoreNames.contains('chunks')) db.deleteObjectStore('chunks');
-                if (db.objectStoreNames.contains('thumbnails')) db.deleteObjectStore('thumbnails');
-                if (db.objectStoreNames.contains('sessions')) db.deleteObjectStore('sessions');
-                if (db.objectStoreNames.contains('annotations')) db.deleteObjectStore('annotations');
-                if (db.objectStoreNames.contains('initializationSegments')) db.deleteObjectStore('initializationSegments');
+                // Graceful upgrade: only create stores that do not already exist.
+                // This preserves existing data when the schema version is bumped.
+                if (!db.objectStoreNames.contains('chunks')) {
+                    const chunkStore = db.createObjectStore("chunks", { keyPath: 'id', autoIncrement: true });
+                    chunkStore.createIndex('session_ts', ['sessionId', 'timestamp'], { unique: false });
+                }
 
-                // Create new stores with correct indexes
-                const chunkStore = db.createObjectStore("chunks", { keyPath: 'id', autoIncrement: true });
-                chunkStore.createIndex('session_ts', ['sessionId', 'timestamp'], { unique: false });
+                if (!db.objectStoreNames.contains('thumbnails')) {
+                    const thumbnailStore = db.createObjectStore("thumbnails", { keyPath: 'id', autoIncrement: true });
+                    thumbnailStore.createIndex('session_ts', ['sessionId', 'timestamp'], { unique: false });
+                }
 
-                const thumbnailStore = db.createObjectStore("thumbnails", { keyPath: 'id', autoIncrement: true });
-                thumbnailStore.createIndex('session_ts', ['sessionId', 'timestamp'], { unique: false });
+                if (!db.objectStoreNames.contains('sessions')) {
+                    db.createObjectStore("sessions", { keyPath: 'id' });
+                }
 
-                db.createObjectStore("sessions", { keyPath: 'id' });
+                if (!db.objectStoreNames.contains('annotations')) {
+                    const annotationStore = db.createObjectStore("annotations", { keyPath: 'id', autoIncrement: true });
+                    annotationStore.createIndex('session_timestamp', ['sessionId', 'timestamp'], { unique: false });
+                }
 
-                const annotationStore = db.createObjectStore("annotations", { keyPath: 'id', autoIncrement: true });
-                annotationStore.createIndex('session_timestamp', ['sessionId', 'timestamp'], { unique: false });
-
-                db.createObjectStore("initializationSegments", { keyPath: 'sessionId' });
+                if (!db.objectStoreNames.contains('initializationSegments')) {
+                    db.createObjectStore("initializationSegments", { keyPath: 'sessionId' });
+                }
             };
         });
     }
@@ -194,7 +198,8 @@ export class DB {
         const transaction = this.db.transaction(["annotations"], "readonly");
         const store = transaction.objectStore("annotations");
         const index = store.index('session_timestamp');
-        const range = IDBKeyRange.lowerBound([sessionId, 0]);
+        // FIX B4: Use a properly bounded range — lowerBound alone leaks into other sessions
+        const range = IDBKeyRange.bound([sessionId, 0], [sessionId, Infinity]);
         const request = index.getAll(range);
         return new Promise((resolve, reject) => {
             request.onerror = () => reject("Error getting all annotations for session");
@@ -249,6 +254,27 @@ export class DB {
             const request = store.add(session);
             request.onerror = () => reject("Error adding session");
             request.onsuccess = () => resolve();
+        });
+    }
+
+    async updateSessionStartTime(sessionId: string, startTime: number) {
+        return new Promise<void>((resolve, reject) => {
+            if (!this.db) return reject("DB not open");
+            const transaction = this.db.transaction(["sessions"], "readwrite");
+            const store = transaction.objectStore("sessions");
+            const request = store.get(sessionId);
+            request.onerror = () => reject("Error getting session for update");
+            request.onsuccess = (event) => {
+                const session = (event.target as IDBRequest).result;
+                if (session) {
+                    session.createdAt = startTime;
+                    const putReq = store.put(session);
+                    putReq.onerror = () => reject("Error updating session");
+                    putReq.onsuccess = () => resolve();
+                } else {
+                    reject("Session not found");
+                }
+            };
         });
     }
 

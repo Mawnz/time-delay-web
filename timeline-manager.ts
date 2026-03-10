@@ -12,12 +12,17 @@ export class TimelineManager {
     private readonly MIN_ZOOM = 1;
     private readonly MAX_ZOOM = 200;
     private readonly MIN_THUMB_WIDTH = 64; // Pixels. We won't render thumbnails smaller than this.
-    private bufferSeconds = 5; 
+    private bufferSeconds = 5;
 
     // State
     private totalDuration: number = 0;
     private renderedThumbnails: Map<number, HTMLImageElement> = new Map();
-    private sessionStartTime: number = 0; 
+    private sessionStartTime: number = 0;
+
+    // Scroll/interaction guards
+    private isUserInteracting = false;         // I3: suppresses auto-scroll while user pans
+    private renderDebounceTimer: number | null = null;  // I5: debounce scroll-triggered renders
+    private renderGeneration = 0;              // I5: cancel stale async render passes
 
     constructor(
         wrapperId: string, 
@@ -43,8 +48,20 @@ export class TimelineManager {
     }
 
     private setupEventListeners() {
+        // I3: Track when user is actively interacting so auto-scroll is suppressed
+        const setInteracting = (v: boolean) => { this.isUserInteracting = v; };
+        this.wrapper.addEventListener('mousedown', () => setInteracting(true));
+        this.wrapper.addEventListener('touchstart', () => setInteracting(true), { passive: true });
+        window.addEventListener('mouseup', () => setInteracting(false));
+        window.addEventListener('touchend', () => setInteracting(false));
+
         this.wrapper.addEventListener('scroll', () => {
-            this.renderVisibleThumbnails();
+            // I5: Debounce — only trigger a render after scrolling settles (80ms)
+            if (this.renderDebounceTimer !== null) clearTimeout(this.renderDebounceTimer);
+            this.renderDebounceTimer = window.setTimeout(() => {
+                this.renderDebounceTimer = null;
+                this.renderVisibleThumbnails();
+            }, 80);
         }, { passive: true });
 
         this.wrapper.addEventListener('mousedown', (e) => {
@@ -74,13 +91,13 @@ export class TimelineManager {
     public updateIndicator(currentTime: number) {
         const pos = this.timeToPixel(currentTime);
         this.indicator.style.transform = `translateX(${pos}px)`;
-        
+
         const visibleStart = this.wrapper.scrollLeft;
         const visibleEnd = visibleStart + this.wrapper.clientWidth;
-        
-        // Auto-scroll logic
-        if (pos > visibleEnd - 50) { 
-            this.wrapper.scrollLeft = pos - (this.wrapper.clientWidth * 0.2); 
+
+        // I3: Only auto-scroll when user is not actively interacting with the timeline
+        if (!this.isUserInteracting && pos > visibleEnd - 50) {
+            this.wrapper.scrollLeft = pos - (this.wrapper.clientWidth * 0.2);
         }
     }
 
@@ -123,11 +140,12 @@ export class TimelineManager {
     private async renderVisibleThumbnails() {
         if (!this.sessionId || this.sessionStartTime === 0) return;
 
+        // I5: Increment generation. If this render becomes stale (a new one starts), bail out.
+        const generation = ++this.renderGeneration;
+
         // 1. Calculate the "Stride"
-        // Stride is how many seconds one thumbnail represents.
-        // If 1 second is 10px (zoomLevel), and min width is 64px, we need roughly 7 seconds per thumbnail.
         const rawStride = this.MIN_THUMB_WIDTH / this._zoomLevel;
-        const stride = Math.max(1, Math.ceil(rawStride)); 
+        const stride = Math.max(1, Math.ceil(rawStride));
 
         const visibleStartPx = this.wrapper.scrollLeft;
         const visibleEndPx = visibleStartPx + this.wrapper.clientWidth;
@@ -137,57 +155,71 @@ export class TimelineManager {
 
         // 2. Align start time to stride boundary
         const startAligned = Math.floor(startTimeRel / stride) * stride;
-        
+
         const dbStart = this.sessionStartTime + (startAligned * 1000);
         const dbEnd = this.sessionStartTime + (endTimeRel * 1000);
 
-        // 3. Cleanup off-screen thumbnails
+        // Fetch range of thumbnails.
+        const thumbs = await this.db.getThumbnailsBetween(this.sessionId, dbStart, dbEnd);
+
+        const validTimestamps = new Set<number>();
+        const chosenThumbs: Array<{ ts: number, data: string, relativeTime: number, pixelPos: number }> = [];
+
+        // 1. Filter out thumbnails and pick ones that satisfy MIN_THUMB_WIDTH distance
+        let lastPixel = -Infinity;
+        thumbs.forEach(t => {
+            const relativeTime = (t.timestamp - this.sessionStartTime) / 1000;
+            // Cap to total duration so we don't draw thumbnails from the delay buffer
+            if (relativeTime > this.totalDuration) return;
+
+            const pixelPos = this.timeToPixel(relativeTime);
+
+            if (pixelPos - lastPixel >= this.MIN_THUMB_WIDTH) {
+                chosenThumbs.push({ ts: t.timestamp, data: t.data, relativeTime, pixelPos });
+                lastPixel = pixelPos;
+            }
+        });
+
+        // 2. Render and dynamically stretch widths to form a perfect contiguous timeline
+        for (let i = 0; i < chosenThumbs.length; i++) {
+            const current = chosenThumbs[i];
+            const next = chosenThumbs[i + 1];
+
+            validTimestamps.add(current.ts);
+
+            let widthPx = this.MIN_THUMB_WIDTH;
+            if (next) {
+                widthPx = next.pixelPos - current.pixelPos;
+            } else {
+                // The last thumbnail stretches to the end of the total duration
+                const endPixel = this.timeToPixel(this.totalDuration);
+                widthPx = Math.max(this.MIN_THUMB_WIDTH, endPixel - current.pixelPos);
+            }
+
+            if (!this.renderedThumbnails.has(current.ts)) {
+                const img = document.createElement('img');
+                img.src = current.data;
+                img.className = 'timeline-thumbnail';
+
+                img.style.transform = `translateX(${current.pixelPos}px)`;
+                img.style.width = `${widthPx}px`;
+
+                this.thumbnailsContainer.appendChild(img);
+                this.renderedThumbnails.set(current.ts, img);
+            } else {
+                const img = this.renderedThumbnails.get(current.ts)!;
+                img.style.transform = `translateX(${current.pixelPos}px)`;
+                img.style.width = `${widthPx}px`;
+            }
+        }
+
+        // 3. Cleanup off-screen or stale thumbnails
         for (const [ts, img] of this.renderedThumbnails) {
-            if (ts < dbStart || ts > dbEnd) {
+            if (!validTimestamps.has(ts)) {
                 img.remove();
                 this.renderedThumbnails.delete(ts);
             }
         }
-
-        // 4. Fetch range of thumbnails.
-        // NOTE: DB returns ALL thumbnails in range. We must filter locally for the stride.
-        // Ideally, DB would support skipping, but IDB is basic.
-        const thumbs = await this.db.getThumbnailsBetween(this.sessionId, dbStart, dbEnd);
-        
-        thumbs.forEach(t => {
-            const relativeTime = (t.timestamp - this.sessionStartTime) / 1000;
-            
-            // Filter: Only show if this timestamp falls near a stride boundary
-            // We allow a small jitter (0.2s) because timers aren't perfect
-            const strideIndex = Math.round(relativeTime / stride);
-            const expectedTime = strideIndex * stride;
-            
-            if (Math.abs(relativeTime - expectedTime) < 0.5) {
-                if (!this.renderedThumbnails.has(t.timestamp)) {
-                    const img = document.createElement('img');
-                    img.src = t.data;
-                    img.className = 'absolute top-0 h-full object-cover select-none pointer-events-none border-r border-gray-800/50';
-                    
-                    const leftPos = this.timeToPixel(relativeTime);
-                    
-                    // STRETCH LOGIC: The width corresponds to the stride duration
-                    const width = stride * this._zoomLevel; 
-                    
-                    img.style.transform = `translateX(${leftPos}px)`;
-                    img.style.width = `${width}px`;
-
-                    this.thumbnailsContainer.appendChild(img);
-                    this.renderedThumbnails.set(t.timestamp, img);
-                } else {
-                    // Update width/position of existing (in case zoom changed)
-                    const img = this.renderedThumbnails.get(t.timestamp)!;
-                    const leftPos = this.timeToPixel(relativeTime);
-                    const width = stride * this._zoomLevel;
-                    img.style.transform = `translateX(${leftPos}px)`;
-                    img.style.width = `${width}px`;
-                }
-            }
-        });
     }
 
     public timeToPixel(time: number): number {

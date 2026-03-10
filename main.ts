@@ -38,19 +38,93 @@ const lineWidthInput = document.getElementById('line-width') as HTMLInputElement
 const undoAnnotationButton = document.getElementById('undo-annotation') as HTMLButtonElement;
 const redoAnnotationButton = document.getElementById('redo-annotation') as HTMLButtonElement;
 
+// Session name modal elements
+const sessionNameModal = document.getElementById('session-name-modal') as HTMLDivElement;
+const sessionNameInput = document.getElementById('session-name-input') as HTMLInputElement;
+const sessionNameConfirm = document.getElementById('session-name-confirm') as HTMLButtonElement;
+const sessionNameCancel = document.getElementById('session-name-cancel') as HTMLButtonElement;
+
+// New responsive UI elements
+const overflowBtn = document.getElementById('overflow-btn') as HTMLButtonElement;
+const overflowDropdown = document.getElementById('overflow-dropdown') as HTMLDivElement;
+const annotationBar = document.getElementById('annotation-bar') as HTMLDivElement;
+const delaySlider = document.getElementById('delay-slider') as HTMLInputElement;
+const delayValueLabel = document.getElementById('delay-value') as HTMLSpanElement;
+
 let isCameraStarted = false;
 
 // --- HELPER: Manually convert Blob to Uint8Array ---
-// This is more stable than using the FFmpegUtil fetchFile for dynamic blobs
 const blobToUint8Array = async (blob: Blob): Promise<Uint8Array> => {
     const buffer = await blob.arrayBuffer();
     return new Uint8Array(buffer);
 };
 
+/** Shows inline session-name modal. Resolves with the entered name or null if cancelled. */
+function promptSessionName(defaultName: string): Promise<string | null> {
+    return new Promise((resolve) => {
+        sessionNameInput.value = defaultName;
+        sessionNameModal.classList.add('open');
+        sessionNameInput.focus();
+        sessionNameInput.select();
+
+        const cleanup = () => {
+            sessionNameModal.classList.remove('open');
+            sessionNameConfirm.removeEventListener('click', onConfirm);
+            sessionNameCancel.removeEventListener('click', onCancel);
+            sessionNameInput.removeEventListener('keydown', onKey);
+        };
+
+        const onConfirm = () => {
+            const val = sessionNameInput.value.trim();
+            cleanup();
+            resolve(val || defaultName);
+        };
+        const onCancel = () => { cleanup(); resolve(null); };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Enter') onConfirm();
+            if (e.key === 'Escape') onCancel();
+        };
+
+        sessionNameConfirm.addEventListener('click', onConfirm);
+        sessionNameCancel.addEventListener('click', onCancel);
+        sessionNameInput.addEventListener('keydown', onKey);
+    });
+}
+
+/** Destroys the current player if one exists. Always call before constructing a new Player. */
+function destroyCurrentPlayer() {
+    if (player) {
+        player.destroy();
+        (player as any) = null;
+    }
+}
+
+/** Syncs the slow-motion button's visual active state with the player's current rate. */
+function updateSlowMoButton() {
+    slowMotionButton.classList.toggle('active', !!(player && player.isSlowMotion));
+}
+
+/** Shows/hides the annotation toolbar based on video pause state. */
+function updateAnnotationBar() {
+    annotationBar.classList.toggle('visible', delayedVideoElement.paused);
+}
+
+/** Updates the export button disabled state based on loop presence */
+function updateExportButtonState() {
+    if (player && player.pointA !== null && player.pointB !== null) {
+        exportClipButton.disabled = false;
+        exportClipButton.title = "Export Clip (MP4)";
+    } else {
+        exportClipButton.disabled = true;
+        exportClipButton.title = "Export Clip (Create a loop to export)";
+    }
+}
+
 window.addEventListener('load', async () => {
     await db.open();
     toggleButton.disabled = false;
-    toggleButton.innerHTML = '<i class="fas fa-video"></i> Start Recording';
+    updateExportButtonState();
+
     annotation = new Annotation(annotationCanvas);
     annotation.onDrawingEnd = (data) => {
         if (currentSessionId) {
@@ -65,9 +139,43 @@ window.addEventListener('load', async () => {
 
     delayedVideoElement.addEventListener('play', () => {
         playPauseButton.innerHTML = '<i class="fas fa-pause"></i>';
+        updateAnnotationBar();
+        annotation.disableDrawing();
+        annotation.clear();
     });
     delayedVideoElement.addEventListener('pause', () => {
         playPauseButton.innerHTML = '<i class="fas fa-play"></i>';
+        updateAnnotationBar();
+        annotation.enableDrawing();
+        if (currentSessionId) {
+            loadAnnotations(currentSessionId, delayedVideoElement.currentTime);
+        }
+    });
+
+    // --- Overflow menu toggle ---
+    overflowBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        overflowDropdown.classList.toggle('open');
+    });
+    document.addEventListener('click', () => overflowDropdown.classList.remove('open'));
+    overflowDropdown.addEventListener('click', (e) => e.stopPropagation());
+
+    // --- Delay slider ---
+    delaySlider.addEventListener('input', () => {
+        const val = parseInt(delaySlider.value);
+        delayValueLabel.textContent = `${val}s`;
+        if (player) player.setDelay(val);
+    });
+
+    // --- Double-tap on video to play/pause ---
+    let lastTap = 0;
+    delayedVideoElement.addEventListener('touchend', (e) => {
+        const now = Date.now();
+        if (now - lastTap < 300) {
+            e.preventDefault();
+            if (player) player.togglePlayPause();
+        }
+        lastTap = now;
     });
 
     loadSessionsList();
@@ -78,12 +186,8 @@ window.addEventListener('load', async () => {
     lineWidthInput.addEventListener('input', (e) => {
         annotation.setLineWidth(parseInt((e.target as HTMLInputElement).value));
     });
-    undoAnnotationButton.addEventListener('click', () => {
-        annotation.undo();
-    });
-    redoAnnotationButton.addEventListener('click', () => {
-        annotation.redo();
-    });
+    undoAnnotationButton.addEventListener('click', () => annotation.undo());
+    redoAnnotationButton.addEventListener('click', () => annotation.redo());
 
     // --- Loop / Timeline Logic ---
     const timelineWrapper = document.getElementById('timeline-wrapper') as HTMLDivElement;
@@ -93,11 +197,11 @@ window.addEventListener('load', async () => {
     let isResizing = false;
     let activeHandle: 'left' | 'right' | null = null;
     let startX = 0;
-    let startLeft = 0;
-    let startWidth = 0;
+    let startPointA = 0;
+    let startPointB = 0;
 
     function handleCreateLoop(event: MouseEvent | Touch) {
-        event.preventDefault(); 
+        if (event instanceof MouseEvent) event.preventDefault();
 
         if (!player || delayedVideoElement.seekable.length === 0) return;
 
@@ -105,13 +209,13 @@ window.addEventListener('load', async () => {
         if (!isFinite(seekableEnd) || seekableEnd === 0) return;
 
         const timelineRect = timelineWrapper.getBoundingClientRect();
-        const clientX = (event as any).clientX || (event as Touch).clientX;
+        const clientX = (event as any).clientX;
         const clickX = clientX - timelineRect.left;
         const scrollX = timelineWrapper.scrollLeft;
-        
+
         const centerTime = player.timelineManager.pixelToTime(clickX + scrollX);
 
-        const loopDuration = 5; 
+        const loopDuration = 5;
         let pointA = centerTime - (loopDuration / 2);
         let pointB = centerTime + (loopDuration / 2);
 
@@ -126,29 +230,31 @@ window.addEventListener('load', async () => {
 
         player.setPointA(pointA);
         player.setPointB(pointB);
-        player.setLoop(true); 
-        
-        toggleLoopButton.classList.add('bg-sky-500');
-        toggleLoopButton.classList.remove('bg-teal-600', 'hover:bg-teal-700');
+        player.setLoop(true);
 
-        delayedVideoElement.currentTime = centerTime; 
+        toggleLoopButton.classList.add('active');
+
+        delayedVideoElement.currentTime = centerTime;
         if (delayedVideoElement.paused) {
             player.togglePlayPause();
         }
 
-        timelineRangeHighlight.style.pointerEvents = 'auto'; 
+        timelineRangeHighlight.style.pointerEvents = 'auto';
+        updateExportButtonState();
     }
 
     timelineWrapper.addEventListener('contextmenu', (e) => handleCreateLoop(e));
 
     let longPressTimer: number;
+    // FIX I4: Use passive: false so preventDefault() is honoured inside the long-press handler
     timelineWrapper.addEventListener('touchstart', (e) => {
         longPressTimer = window.setTimeout(() => {
-            if (e.touches.length === 1) { 
+            if (e.touches.length === 1) {
+                e.preventDefault(); // now works — listener is non-passive
                 handleCreateLoop(e.touches[0]);
             }
-        }, 500); 
-    }, { passive: true });
+        }, 500);
+    }, { passive: false });
 
     timelineWrapper.addEventListener('touchend', () => clearTimeout(longPressTimer));
     timelineWrapper.addEventListener('touchmove', () => clearTimeout(longPressTimer));
@@ -156,28 +262,30 @@ window.addEventListener('load', async () => {
     timelineRangeHighlight.addEventListener('mousedown', (e) => {
         if ((e.target as HTMLElement).classList.contains('resize-handle')) return;
         e.preventDefault();
+        if (!player || player.pointA === null || player.pointB === null) return;
         isDragging = true;
         startX = e.clientX;
-        startLeft = timelineRangeHighlight.offsetLeft;
+        startPointA = player.pointA;
+        startPointB = player.pointB;
     });
 
     Array.from(timelineRangeHighlight.children).forEach(handle => {
         handle.addEventListener('mousedown', (e) => {
             e.preventDefault();
-            e.stopPropagation();
+            if (!player || player.pointA === null || player.pointB === null) return;
             isResizing = true;
             activeHandle = (e.target as HTMLElement).classList.contains('left') ? 'left' : 'right';
-            startX = e.clientX;
-            startLeft = timelineRangeHighlight.offsetLeft;
-            startWidth = timelineRangeHighlight.offsetWidth;
+            startX = (e as MouseEvent).clientX;
+            startPointA = player.pointA;
+            startPointB = player.pointB;
         });
     });
 
     timelineRangeHighlight.addEventListener('dblclick', () => {
         if (player) {
             player.clearPoints();
-            toggleLoopButton.classList.remove('bg-sky-500');
-            toggleLoopButton.classList.add('bg-teal-600', 'hover:bg-teal-700');
+            toggleLoopButton.classList.remove('active');
+            updateExportButtonState();
         }
     });
 
@@ -185,27 +293,37 @@ window.addEventListener('load', async () => {
         if (!player || (!isDragging && !isResizing)) return;
         e.preventDefault();
 
-        const spacer = document.getElementById('timeline-spacer') as HTMLDivElement;
-        const scrollWidth = spacer.offsetWidth; 
-        const dx = e.clientX - startX;
+        const dxTime = player.timelineManager.pixelToTime(e.clientX - startX);
+        const totalDuration = delayedVideoElement.seekable.length > 0 ? 
+            delayedVideoElement.seekable.end(delayedVideoElement.seekable.length - 1) : 0;
 
         if (isDragging) {
-            const newLeft = Math.max(0, Math.min(startLeft + dx, scrollWidth - timelineRangeHighlight.offsetWidth));
-            const startTime = player.timelineManager.pixelToTime(newLeft);
-            const duration = player.timelineManager.pixelToTime(timelineRangeHighlight.offsetWidth);
-            
-            player.setPointA(startTime);
-            player.setPointB(startTime + duration);
+            const loopLen = startPointB - startPointA;
+            let newA = startPointA + dxTime;
+            let newB = startPointB + dxTime;
+
+            if (newA < 0) {
+                newA = 0;
+                newB = loopLen;
+            } else if (newB > totalDuration && totalDuration > 0) {
+                newB = totalDuration;
+                newA = Math.max(0, totalDuration - loopLen);
+            }
+
+            player.setPointA(newA);
+            player.setPointB(newB);
         } else if (isResizing) {
             if (activeHandle === 'left') {
-                const newLeft = Math.max(0, startLeft + dx);
-                const startTime = player.timelineManager.pixelToTime(newLeft);
-                player.setPointA(startTime);
+                const newA = Math.max(0, startPointA + dxTime);
+                if (newA <= startPointB - 0.5) { // min 0.5s loop
+                    player.setPointA(newA);
+                }
             } else if (activeHandle === 'right') {
-                const newWidth = Math.max(20, startWidth + dx);
-                const newRight = startLeft + newWidth;
-                const endTime = player.timelineManager.pixelToTime(newRight);
-                player.setPointB(endTime);
+                let newB = startPointB + dxTime;
+                if (totalDuration > 0) newB = Math.min(newB, totalDuration);
+                if (newB >= startPointA + 0.5) { // min 0.5s loop
+                    player.setPointB(newB);
+                }
             }
         }
     });
@@ -229,15 +347,19 @@ async function loadAnnotations(sessionId: string, timestamp: number) {
 async function loadSessionsList() {
     await db.getAllSessions(sessions => {
         sessionsList.innerHTML = '';
+        if (sessions.length === 0) {
+            const empty = document.createElement('li');
+            empty.className = 'sessions-empty';
+            empty.textContent = 'No sessions yet. Start Recording to create one.';
+            sessionsList.appendChild(empty);
+            return;
+        }
+        sessions.sort((a, b) => b.createdAt - a.createdAt);
         sessions.forEach(session => {
             const li = document.createElement('li');
-            li.className = 'p-2 hover:bg-gray-700 flex justify-between items-center';
-            
             const sessionInfo = document.createElement('span');
-            sessionInfo.className = 'cursor-pointer';
-            sessionInfo.textContent = `${session.name} - ${new Date(session.createdAt).toLocaleString()}`;
+            sessionInfo.textContent = `${session.name} — ${new Date(session.createdAt).toLocaleString()}`;
             sessionInfo.dataset.sessionId = session.id;
-            
             li.appendChild(sessionInfo);
             sessionsList.appendChild(li);
         });
@@ -245,11 +367,12 @@ async function loadSessionsList() {
 }
 
 sessionsButton?.addEventListener('click', () => {
-    sessionsModal.classList.remove('hidden');
+    sessionsModal.classList.add('open');
+    loadSessionsList();
 });
 
 closeSessionsButton?.addEventListener('click', () => {
-    sessionsModal.classList.add('hidden');
+    sessionsModal.classList.remove('open');
 });
 
 importSessionButton?.addEventListener('click', () => {
@@ -264,13 +387,15 @@ importFileInput?.addEventListener('change', (e) => {
             try {
                 const data = JSON.parse(event.target?.result as string);
                 await importSession(data);
-                sessionsModal.classList.add('hidden');
+                sessionsModal.classList.remove('open');
             } catch (error) {
                 console.error('Error importing session:', error);
                 alert('Failed to import session. Invalid file format.');
             }
         };
         reader.readAsText(file);
+        // Reset so the same file can be re-selected
+        (e.target as HTMLInputElement).value = '';
     }
 });
 
@@ -286,20 +411,21 @@ async function importSession(data: any) {
 
     const base64ToBlob = (base64: string) => fetch(base64).then(res => res.blob());
 
-    for (const chunk of data.chunks) {
+    // Parallel import of chunks, thumbnails, and annotations for speed
+    await Promise.all(data.chunks.map(async (chunk: any) => {
         const blob = await base64ToBlob(chunk.data);
         await db.addChunk(newSessionId, blob);
-    }
+    }));
 
-    for (const thumbnail of data.thumbnails) {
-        await db.addThumbnail(newSessionId, thumbnail.data);
-    }
+    await Promise.all(data.thumbnails.map((thumbnail: any) =>
+        db.addThumbnail(newSessionId, thumbnail.data)
+    ));
 
-    for (const annotationEntry of data.annotations) {
-        for (const drawingHistoryEntry of annotationEntry.data) {
-            await db.addAnnotation(newSessionId, annotationEntry.timestamp, drawingHistoryEntry);
-        }
-    }
+    await Promise.all(data.annotations.map((annotationEntry: any) =>
+        Promise.all(annotationEntry.data.map((drawingHistoryEntry: any) =>
+            db.addAnnotation(newSessionId, annotationEntry.timestamp, drawingHistoryEntry)
+        ))
+    ));
 
     loadSessionsList();
     console.log('Import complete');
@@ -307,81 +433,79 @@ async function importSession(data: any) {
 
 sessionsList.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
-    if (target.dataset.sessionId) {
-        currentSessionId = target.dataset.sessionId;
+    const sessionId = target.dataset.sessionId || (target.closest('[data-session-id]') as HTMLElement | null)?.dataset.sessionId;
+    if (sessionId) {
+        currentSessionId = sessionId;
         if (isCameraStarted) {
             camera.stop();
             isCameraStarted = false;
-            toggleButton.innerHTML = '<i class="fas fa-video"></i> Start Recording';
-            recordingIndicator.style.display = 'none';
+            toggleButton.innerHTML = '<i class="fas fa-circle"></i><span class="btn-label">Record</span>';
+            toggleButton.classList.remove('recording');
+            recordingIndicator.classList.add('hidden');
         }
+        destroyCurrentPlayer();
         player = new Player(delayedVideoElement, db, currentSessionId);
+        player.setDelay(parseInt(delaySlider.value));
         player.start();
-        sessionsModal.classList.add('hidden');
+        sessionsModal.classList.remove('open');
+        updateExportButtonState();
     }
 });
 
 toggleButton?.addEventListener('click', async () => {
     if (isCameraStarted) {
         if (camera) camera.stop();
-        toggleButton.innerHTML = '<i class="fas fa-video"></i> Start Recording';
-        recordingIndicator.style.display = 'none';
+        toggleButton.innerHTML = '<i class="fas fa-circle"></i><span class="btn-label">Record</span>';
+        toggleButton.classList.remove('recording');
+        recordingIndicator.classList.add('hidden');
         isCameraStarted = false;
     } else {
-        const sessionName = prompt("Enter session name:", `Session ${new Date().toLocaleString()}`);
+        const sessionName = await promptSessionName(`Session ${new Date().toLocaleString()}`);
         if (sessionName) {
             currentSessionId = Date.now().toString();
             await db.addSession({ id: currentSessionId, name: sessionName, createdAt: Date.now() });
             loadSessionsList();
+
+            destroyCurrentPlayer();
             camera = new Camera(liveVideoElement, db, currentSessionId);
             player = new Player(delayedVideoElement, db, currentSessionId);
-            
+            player.setDelay(parseInt(delaySlider.value));
+
             await camera.start();
             player.start();
 
-            toggleButton.innerHTML = '<i class="fas fa-stop-circle"></i> Stop Recording';
-            recordingIndicator.style.display = 'block';
+            toggleButton.innerHTML = '<i class="fas fa-stop"></i><span class="btn-label">Stop</span>';
+            toggleButton.classList.add('recording');
+            recordingIndicator.classList.remove('hidden');
             isCameraStarted = true;
+            updateExportButtonState();
         }
     }
 });
 
 clearButton?.addEventListener('click', async () => {
     if (confirm('Are you sure you want to delete all data?')) {
+        destroyCurrentPlayer();
         await db.clear();
         window.location.reload();
     }
 });
 
 playPauseButton?.addEventListener('click', () => {
-    if (player) {
-        player.togglePlayPause();
-        if (delayedVideoElement.paused) {
-            annotation.enableDrawing();
-            if (currentSessionId) {
-                loadAnnotations(currentSessionId, delayedVideoElement.currentTime);
-            }
-        } else {
-            annotation.disableDrawing();
-            annotation.clear();
-        }
-    }
+    if (player) player.togglePlayPause();
 });
 
 slowMotionButton?.addEventListener('click', () => {
-    if (player) player.toggleSlowMotion();
+    if (player) {
+        player.toggleSlowMotion();
+        updateSlowMoButton();
+    }
 });
 
 toggleLoopButton?.addEventListener('click', () => {
     if (player) {
         player.toggleLoop();
-        if (player.loopEnabled) {
-            toggleLoopButton.classList.add('bg-sky-500');
-            toggleLoopButton.classList.remove('bg-teal-600', 'hover:bg-teal-700');
-        } else {
-            toggleLoopButton.classList.remove('bg-sky-500');
-            toggleLoopButton.classList.add('bg-teal-600', 'hover:bg-teal-700');
-        }
+        toggleLoopButton.classList.toggle('active', player.loopEnabled);
     }
 });
 
@@ -393,10 +517,18 @@ exportClipButton?.addEventListener('click', async () => {
     }
 
     const btn = exportClipButton;
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Processing...';
+    const originalHTML = btn.innerHTML;
     btn.disabled = true;
-    btn.classList.add('opacity-50');
+
+    const setProgress = (pct: number | null) => {
+        if (pct === null) {
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Loading FFmpeg...';
+        } else if (pct < 0) {
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Merging...';
+        } else {
+            btn.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> Encoding ${pct}%`;
+        }
+    };
 
     let ffmpeg: any = null;
 
@@ -404,44 +536,37 @@ exportClipButton?.addEventListener('click', async () => {
     try {
         // 1. Fetch the header (Init Segment)
         const initSegmentBlob = await db.getInitializationSegment(currentSessionId);
-        if (!initSegmentBlob) {
-            throw new Error("Missing initialization segment.");
-        }
+        if (!initSegmentBlob) throw new Error("Missing initialization segment.");
         const initData = await blobToUint8Array(initSegmentBlob);
 
         // 2. Get Raw Chunks
         const clipData = await player.getClipData(player.pointA, player.pointB);
-        if(clipData.chunks.length === 0) {
-            throw new Error("No video data found in selected range.");
-        }
+        if (clipData.chunks.length === 0) throw new Error("No video data found in selected range.");
 
         // 3. MERGE CHUNKS IN MEMORY
+        setProgress(-1);
         console.log("Merging chunks into single binary stream...");
-        
-        const chunkBuffers = await Promise.all(
-            clipData.chunks.map(c => blobToUint8Array(c.data))
-        );
 
-        // Calculate total size
-        const totalSize = initData.length + chunkBuffers.reduce((acc, buf) => acc + buf.length, 0);
+        const chunkBuffers = await Promise.all(clipData.chunks.map((c: any) => blobToUint8Array(c.data)));
+        const totalSize = initData.length + chunkBuffers.reduce((acc: number, buf: Uint8Array) => acc + buf.length, 0);
         const mergedBuffer = new Uint8Array(totalSize);
-
-        // Append Header first
         mergedBuffer.set(initData, 0);
         let offset = initData.length;
-
-        // Append all Chunks sequentially
         for (const buf of chunkBuffers) {
             mergedBuffer.set(buf, offset);
             offset += buf.length;
         }
 
         // 4. Load FFmpeg
+        setProgress(null);
         const { FFmpeg } = (window as any).FFmpegWASM;
         ffmpeg = new FFmpeg();
-        
-        ffmpeg.on('log', ({ message }: { message: string }) => {
-            console.log('FFmpeg Log:', message);
+
+        ffmpeg.on('log', ({ message }: { message: string }) => console.log('FFmpeg:', message));
+
+        // FIX R4: Wire up FFmpeg progress events for live % display
+        ffmpeg.on('progress', ({ progress }: { progress: number }) => {
+            setProgress(Math.round(progress * 100));
         });
 
         await ffmpeg.load({
@@ -450,21 +575,20 @@ exportClipButton?.addEventListener('click', async () => {
         });
 
         // 5. Write the Single Merged Source
-        // This creates a valid-ish WebM stream structure
         await ffmpeg.writeFile('source.webm', mergedBuffer);
 
         // 6. Run Transcode
-        // Critical Flags:
-        // -fflags +genpts: Regenerate Presentation Time Stamps to fix the freeze/gaps
-        // -ignore_unknown: Skip invalid data at start
-        // -c:v libx264: Re-encode to H.264 (Creates valid MP4 structure)
-        // -preset ultrafast: Speed
-        console.log("Transcoding to MP4...");
+        console.log("Transcoding to MP4 from " + player.pointA + " to " + player.pointB);
+        
+        const startPoint = Math.min(player.pointA, player.pointB);
+        const endPoint = Math.max(player.pointA, player.pointB);
+        
         await ffmpeg.exec([
-            '-fflags', '+genpts', 
+            '-ss', startPoint.toString(),
+            '-to', endPoint.toString(),
             '-i', 'source.webm',
             '-c:v', 'libx264',
-            '-preset', 'ultrafast', 
+            '-preset', 'ultrafast',
             'output.mp4'
         ]);
 
@@ -472,7 +596,7 @@ exportClipButton?.addEventListener('click', async () => {
         const data = await ffmpeg.readFile('output.mp4');
         const blob = new Blob([data], { type: 'video/mp4' });
         const url = URL.createObjectURL(blob);
-        
+
         const a = document.createElement('a');
         a.href = url;
         a.download = `clip-${Date.now()}.mp4`;
@@ -487,22 +611,19 @@ exportClipButton?.addEventListener('click', async () => {
         console.error('Export failed:', error);
         alert('Failed to export video. See console for details.');
     } finally {
-        btn.innerHTML = originalText;
+        btn.innerHTML = originalHTML;
         btn.disabled = false;
         btn.classList.remove('opacity-50');
-        
+
         if (ffmpeg) {
-            try {
-                ffmpeg.terminate();
-                console.log('FFmpeg terminated.');
-            } catch (e) { console.warn(e); }
+            try { ffmpeg.terminate(); } catch (e) { console.warn(e); }
         }
     }
 });
 
 frameBackwardButton?.addEventListener('click', () => {
     if (player) {
-        player.userPaused = true; 
+        player.userPaused = true;
         player.frameStep('backward');
         if (currentSessionId) {
             loadAnnotations(currentSessionId, delayedVideoElement.currentTime);
@@ -512,7 +633,7 @@ frameBackwardButton?.addEventListener('click', () => {
 
 frameForwardButton?.addEventListener('click', () => {
     if (player) {
-        player.userPaused = true; 
+        player.userPaused = true;
         player.frameStep('forward');
         if (currentSessionId) {
             loadAnnotations(currentSessionId, delayedVideoElement.currentTime);

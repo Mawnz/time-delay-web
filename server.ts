@@ -51,6 +51,10 @@ serve({
       response = new Response(result.outputs[0], {
         headers: { "Content-Type": "application/javascript" },
       });
+    } else if (url.pathname === "/styles.css") {
+      response = new Response(Bun.file("styles.css"), {
+        headers: { "Content-Type": "text/css" },
+      });
     } else if (url.pathname === "/favicon.ico") {
         response = new Response(null, { status: 204 });
     } else {

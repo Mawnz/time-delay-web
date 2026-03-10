@@ -8,15 +8,39 @@ export class Annotation {
     private currentWidth: number = 2;
     public onDrawingEnd: (data: any[]) => void = () => {};
 
+    // FIX B3: ResizeObserver keeps canvas pixels aligned with CSS dimensions
+    private resizeObserver: ResizeObserver;
+
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d')!;
-        this.canvas.width = this.canvas.offsetWidth;
-        this.canvas.height = this.canvas.offsetHeight;
+        this.syncCanvasSize();
         this.ctx.lineJoin = 'round';
         this.ctx.lineCap = 'round';
         this.ctx.strokeStyle = this.currentColor;
         this.ctx.lineWidth = this.currentWidth;
+
+        // Observe size changes and resync the canvas coordinate system
+        this.resizeObserver = new ResizeObserver(() => {
+            this.syncCanvasSize();
+            this.redraw();
+        });
+        this.resizeObserver.observe(canvas);
+    }
+
+    /** Keeps canvas pixel buffer in sync with its CSS layout size. */
+    private syncCanvasSize() {
+        const w = this.canvas.offsetWidth;
+        const h = this.canvas.offsetHeight;
+        if (this.canvas.width !== w || this.canvas.height !== h) {
+            this.canvas.width = w;
+            this.canvas.height = h;
+            // Restore context styles — they are reset when canvas dimensions change
+            this.ctx.lineJoin = 'round';
+            this.ctx.lineCap = 'round';
+            this.ctx.strokeStyle = this.currentColor;
+            this.ctx.lineWidth = this.currentWidth;
+        }
     }
 
     public enableDrawing() {
@@ -25,10 +49,10 @@ export class Annotation {
         this.canvas.addEventListener('mousemove', this.draw);
         this.canvas.addEventListener('mouseup', this.stopDrawing);
         this.canvas.addEventListener('mouseout', this.stopDrawing);
-        this.canvas.addEventListener('touchstart', this.startDrawingTouch);
-        this.canvas.addEventListener('touchmove', this.drawTouch);
-        this.canvas.addEventListener('touchend', this.stopDrawingTouch);
-        this.canvas.addEventListener('touchcancel', this.stopDrawingTouch);
+        this.canvas.addEventListener('touchstart', this.startDrawingTouch, { passive: false });
+        this.canvas.addEventListener('touchmove', this.drawTouch, { passive: false });
+        this.canvas.addEventListener('touchend', this.stopDrawingTouch, { passive: false });
+        this.canvas.addEventListener('touchcancel', this.stopDrawingTouch, { passive: false });
     }
 
     public disableDrawing() {
@@ -49,7 +73,7 @@ export class Annotation {
         }
         this.historyPointer++;
         this.drawingHistory.push({ path: [], color: this.currentColor, width: this.currentWidth });
-        
+
         this.isDrawing = true;
         this.ctx.strokeStyle = this.currentColor;
         this.ctx.lineWidth = this.currentWidth;
@@ -79,13 +103,13 @@ export class Annotation {
         const rect = this.canvas.getBoundingClientRect();
         const offsetX = touch.clientX - rect.left;
         const offsetY = touch.clientY - rect.top;
-        
+
         if (this.historyPointer < this.drawingHistory.length - 1) {
             this.drawingHistory = this.drawingHistory.slice(0, this.historyPointer + 1);
         }
         this.historyPointer++;
         this.drawingHistory.push({ path: [], color: this.currentColor, width: this.currentWidth });
-        
+
         this.isDrawing = true;
         this.ctx.strokeStyle = this.currentColor;
         this.ctx.lineWidth = this.currentWidth;
@@ -130,7 +154,7 @@ export class Annotation {
             this.historyPointer--;
             this.redraw();
         } else if (this.historyPointer === 0) {
-            this.historyPointer--; // Go to -1 to indicate no drawings
+            this.historyPointer--;
             this.clearCanvas();
         }
     }
@@ -153,7 +177,6 @@ export class Annotation {
     }
 
     public getDrawingData(): any[] {
-        // Return the current state of the drawing history for saving
         return this.drawingHistory.slice(0, this.historyPointer + 1);
     }
 
@@ -187,5 +210,10 @@ export class Annotation {
         // Restore current drawing style
         this.ctx.strokeStyle = this.currentColor;
         this.ctx.lineWidth = this.currentWidth;
+    }
+
+    /** Disconnect the resize observer when this instance is no longer needed. */
+    public destroy() {
+        this.resizeObserver.disconnect();
     }
 }
