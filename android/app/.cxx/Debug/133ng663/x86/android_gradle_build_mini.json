@@ -1,0 +1,55 @@
+{
+  "buildFiles": [
+    "C:\\Users\\bomst\\projects\\time-delay\\node_modules\\react-native-safe-area-context\\android\\src\\main\\jni\\CMakeLists.txt",
+    "C:\\Users\\bomst\\projects\\time-delay\\node_modules\\react-native-svg\\android\\src\\main\\jni\\CMakeLists.txt",
+    "C:\\Users\\bomst\\projects\\time-delay\\node_modules\\react-native\\ReactAndroid\\cmake-utils\\default-app-setup\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "C:\\Users\\bomst\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "C:\\Users\\bomst\\projects\\time-delay\\android\\app\\.cxx\\Debug\\133ng663\\x86",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "C:\\Users\\bomst\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "C:\\Users\\bomst\\projects\\time-delay\\android\\app\\.cxx\\Debug\\133ng663\\x86",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "react_codegen_safeareacontext::@7984cd80db47aa7b952a": {
+      "artifactName": "react_codegen_safeareacontext",
+      "abi": "x86",
+      "output": "C:\\Users\\bomst\\projects\\time-delay\\android\\app\\build\\intermediates\\cxx\\Debug\\133ng663\\obj\\x86\\libreact_codegen_safeareacontext.so",
+      "runtimeFiles": [
+        "C:\\Users\\bomst\\.gradle\\caches\\8.13\\transforms\\ed59d0ecea603bfb47de34125019aeb1\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.x86\\libfbjni.so",
+        "C:\\Users\\bomst\\.gradle\\caches\\8.13\\transforms\\b6618b78789a35661d01e7888365bed1\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\jsi\\libs\\android.x86\\libjsi.so",
+        "C:\\Users\\bomst\\.gradle\\caches\\8.13\\transforms\\b6618b78789a35661d01e7888365bed1\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\reactnative\\libs\\android.x86\\libreactnative.so"
+      ]
+    },
+    "appmodules::@6890427a1f51a3e7e1df": {
+      "artifactName": "appmodules",
+      "abi": "x86",
+      "output": "C:\\Users\\bomst\\projects\\time-delay\\android\\app\\build\\intermediates\\cxx\\Debug\\133ng663\\obj\\x86\\libappmodules.so",
+      "runtimeFiles": [
+        "C:\\Users\\bomst\\projects\\time-delay\\android\\app\\build\\intermediates\\cxx\\Debug\\133ng663\\obj\\x86\\libreact_codegen_safeareacontext.so",
+        "C:\\Users\\bomst\\projects\\time-delay\\android\\app\\build\\intermediates\\cxx\\Debug\\133ng663\\obj\\x86\\libreact_codegen_rnsvg.so",
+        "C:\\Users\\bomst\\.gradle\\caches\\8.13\\transforms\\ed59d0ecea603bfb47de34125019aeb1\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.x86\\libfbjni.so",
+        "C:\\Users\\bomst\\.gradle\\caches\\8.13\\transforms\\b6618b78789a35661d01e7888365bed1\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\jsi\\libs\\android.x86\\libjsi.so",
+        "C:\\Users\\bomst\\.gradle\\caches\\8.13\\transforms\\b6618b78789a35661d01e7888365bed1\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\reactnative\\libs\\android.x86\\libreactnative.so"
+      ]
+    },
+    "react_codegen_rnsvg::@4f40eb209d0c0b4a3b65": {
+      "artifactName": "react_codegen_rnsvg",
+      "abi": "x86",
+      "output": "C:\\Users\\bomst\\projects\\time-delay\\android\\app\\build\\intermediates\\cxx\\Debug\\133ng663\\obj\\x86\\libreact_codegen_rnsvg.so",
+      "runtimeFiles": [
+        "C:\\Users\\bomst\\.gradle\\caches\\8.13\\transforms\\b6618b78789a35661d01e7888365bed1\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\reactnative\\libs\\android.x86\\libreactnative.so",
+        "C:\\Users\\bomst\\.gradle\\caches\\8.13\\transforms\\b6618b78789a35661d01e7888365bed1\\transformed\\react-android-0.84.1-debug\\prefab\\modules\\jsi\\libs\\android.x86\\libjsi.so",
+        "C:\\Users\\bomst\\.gradle\\caches\\8.13\\transforms\\ed59d0ecea603bfb47de34125019aeb1\\transformed\\fbjni-0.7.0\\prefab\\modules\\fbjni\\libs\\android.x86\\libfbjni.so"
+      ]
+    }
+  }
+}

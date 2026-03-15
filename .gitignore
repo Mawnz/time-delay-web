@@ -1,1 +1,52 @@
-**/node_modules
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# React Native
+.bundle/
+vendor/
+.watchmanconfig
+.vscode/
+.expo/
+*.jks
+*.keystore
+!debug.keystore
+
+# Android
+android/app/build/
+android/.gradle/
+android/app/src/main/assets/index.android.bundle
+android/java_pid*.hprof
+local.properties
+.idea/
+
+# iOS
+ios/build/
+ios/Pods/
+ios/DerivedData/
+*.xcworkspace
+!ios/TimeDelay.xcworkspace
+
+# Project Specific
+debug.txt
+logcat.txt
+logcat-latest.txt
+build_out.txt
+explanation.md
+newplan.md
+PLAN.md
+roadmap.md
+
+# Legacy
+legacy/node_modules/
+legacy/dist/

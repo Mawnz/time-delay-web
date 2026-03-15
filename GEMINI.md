@@ -1,29 +1,30 @@
-# Project Context: Time Delay Video Playback
+# Project Context: Time Delay Video Playback (React Native Migration COMPLETE)
 
-This project implements a time-delayed video playback system in the browser. It captures a live camera feed, buffers it, and allows the user to play it back with a delay, including seeking functionality.
+> [!IMPORTANT]
+> **Status**: Successfully migrated from Capacitor to **React Native 0.84.1 (Bare CLI)**. 
+> Seamless, high-performance video playback with live PIP is now fully functional on Android.
 
-## Technologies Used:
-- **Bun:** JavaScript runtime and toolkit.
-- **TypeScript:** Superset of JavaScript for type safety.
-- **HTML5:** For the web page structure.
-- **Tailwind CSS:** For styling and responsive UI.
-- **Web APIs:**
-    - **`MediaDevices.getUserMedia()`:** To access the user's camera.
-    - **`MediaRecorder`:** To record the camera stream into chunks.
-    - **`IndexedDB`:** To store the video chunks persistently in the browser's local storage.
-    - **`MediaSource API`:** To enable dynamic streaming of video content, allowing for seamless playback of buffered chunks and seeking.
+## Final Architecture: React Native
 
-## Main Features:
-- **Live Camera Preview:** Displays the live camera feed (hidden in the current UI).
-- **Delayed Playback:** Plays the camera feed with a configurable delay.
-- **Persistent Storage:** Video chunks are stored in `IndexedDB` for later retrieval and seeking.
-- **Dynamic Timeline:** A seek bar (`<input type="range">`) that expands as new video chunks are recorded.
-- **Seeking Functionality:** Users can drag the timeline to seek to any point in the buffered video. The far right of the timeline always represents the "live" feed.
-- **Responsive UI:** Styled with Tailwind CSS for compatibility with various device sizes and touch controls.
+### Core Stack
+- **Framework**: React Native 0.84.1
+- **Camera**: `react-native-vision-camera` (v4+) - **CRITICAL**: Use `androidPreviewViewType="texture-view"` for layering.
+- **Video Playback**: `react-native-video` - **CRITICAL**: Use `useTextureView={true}` and `opacity: 0.99` for stable z-index layering on Android.
+- **Storage**: SQLite (`react-native-sqlite-storage`) for metadata; local FS for MP4 segments.
+- **UI**: Custom custom PanResponder-based Timeline and Annotation engine.
 
-## Current State & Challenges:
-- The core functionality of capturing, buffering, storing in `IndexedDB`, and playing back with `MediaSource` is working.
-- The UI is styled with Tailwind CSS and includes a dynamic timeline for seeking.
-- **Seeking Implementation:** The seeking logic involves clearing and re-appending buffers to the `MediaSource`, which can be a complex operation. The current implementation attempts to remove buffered ranges and then re-fetch and append chunks from the seek point.
-- **Performance and Smoothness:** Ensuring smooth playback and efficient buffering, especially during seeking, remains an ongoing challenge. The `MediaSource` API requires careful management of `SourceBuffer` updates and appending operations.
-- **Error Handling:** Robust error handling for `MediaSource` and `IndexedDB` operations is crucial for a stable application.
+### Key Technical Solutions
+- **Gapless Playback**: "Ping-Pong" dual-player system (`SeamlessPlayer`) using 5s segmented MP4s.
+- **PIP Layering (Android)**: Standard `SurfaceView` sits behind the UI. Forcing both Camera and Video to use `TextureView` allows them to participate in the standard `zIndex` stack.
+- **Loop Stability**: Atomic seek gating using `isSeekingRef` prevents concurrent playback collisions.
+- **Handle Precision**: Using "Latest Props Refs" in `Timeline.tsx` prevents closure-related handle jumps during high-speed dragging.
+
+## Environment & Build
+- **JDK**: 17
+- **NDK**: 27.1.12297006 (for C++20 support)
+- **Gradle**: 8.13
+- **Build Optimization**: Builds require `_JAVA_OPTIONS` to be unset and `org.gradle.jvmargs=-Xmx12288m` in `gradle.properties`.
+
+---
+## Legacy Architecture (Capacitor - moved to `legacy/`)
+The original web-based MSE implementation is preserved in the `legacy/` directory for reference.

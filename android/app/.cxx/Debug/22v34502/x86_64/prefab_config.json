@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "prefabPath": "C:\\Users\\bomst\\.gradle\\caches\\modules-2\\files-2.1\\com.google.prefab\\cli\\2.1.0\\aa32fec809c44fa531f01dcfb739b5b3304d3050\\cli-2.1.0-all.jar",
+  "packages": [
+    "C:\\Users\\bomst\\projects\\time-delay\\node_modules\\react-native-vision-camera\\android\\build\\intermediates\\prefab_package\\debug\\prefab",
+    "C:\\Users\\bomst\\.gradle\\caches\\8.13\\transforms\\b6618b78789a35661d01e7888365bed1\\transformed\\react-android-0.84.1-debug\\prefab",
+    "C:\\Users\\bomst\\projects\\time-delay\\node_modules\\react-native-reanimated\\android\\build\\intermediates\\prefab_package\\debug\\prefab",
+    "C:\\Users\\bomst\\projects\\time-delay\\node_modules\\react-native-worklets\\android\\build\\intermediates\\prefab_package\\debug\\prefab",
+    "C:\\Users\\bomst\\.gradle\\caches\\8.13\\transforms\\1a2119c11eba9b594229b8e9debdd282\\transformed\\hermes-android-250829098.0.9-debug\\prefab",
+    "C:\\Users\\bomst\\.gradle\\caches\\8.13\\transforms\\ed59d0ecea603bfb47de34125019aeb1\\transformed\\fbjni-0.7.0\\prefab"
+  ]
+}

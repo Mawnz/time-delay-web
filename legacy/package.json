@@ -1,0 +1,25 @@
+{
+  "name": "time-delay",
+  "module": "server.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot server.ts",
+    "build": "bun build main.ts --outdir dist --target browser --minify",
+    "build:copy": "bun run build && node -e \"const fs=require('fs');['index.html','styles.css'].forEach(f=>fs.copyFileSync(f,'dist/'+f))\"",
+    "cap:sync": "npx cap sync android",
+    "cap:open": "npx cap open android",
+    "android": "npm run build:copy && npm run cap:sync"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.0",
+    "@capacitor/cli": "^7.4.0",
+    "@capacitor/core": "^7.4.0",
+    "@capacitor/filesystem": "^7.0.0"
+  }
+}
