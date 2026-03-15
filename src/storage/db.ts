@@ -15,6 +15,7 @@ export const initDB = async () => {
 
   await db.executeSql('PRAGMA foreign_keys = ON;');
 
+  // Sessions Table
   await db.executeSql(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
@@ -23,6 +24,7 @@ export const initDB = async () => {
     );
   `);
 
+  // Segments Table + Index
   await db.executeSql(`
     CREATE TABLE IF NOT EXISTS segments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +35,9 @@ export const initDB = async () => {
       FOREIGN KEY(sessionId) REFERENCES sessions(id) ON DELETE CASCADE
     );
   `);
+  await db.executeSql('CREATE INDEX IF NOT EXISTS idx_segments_session_ts ON segments(sessionId, timestamp);');
 
+  // Thumbnails Table + Index
   await db.executeSql(`
     CREATE TABLE IF NOT EXISTS thumbnails (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,7 +47,9 @@ export const initDB = async () => {
       FOREIGN KEY(sessionId) REFERENCES sessions(id) ON DELETE CASCADE
     );
   `);
+  await db.executeSql('CREATE INDEX IF NOT EXISTS idx_thumbnails_session_ts ON thumbnails(sessionId, timestamp);');
 
+  // Annotations Table + Index
   await db.executeSql(`
     CREATE TABLE IF NOT EXISTS annotations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,6 +59,7 @@ export const initDB = async () => {
       FOREIGN KEY(sessionId) REFERENCES sessions(id) ON DELETE CASCADE
     );
   `);
+  await db.executeSql('CREATE INDEX IF NOT EXISTS idx_annotations_session_ts ON annotations(sessionId, timestamp);');
 };
 
 export const Database = {
@@ -93,7 +100,10 @@ export const Database = {
 
   getSegments: async (sessionId: string): Promise<Segment[]> => {
     if (!db) await initDB();
-    const [results] = await db!.executeSql('SELECT * FROM segments WHERE sessionId = ? ORDER BY timestamp ASC', [sessionId]);
+    const [results] = await db!.executeSql(
+      'SELECT * FROM segments WHERE sessionId = ? ORDER BY timestamp ASC', 
+      [sessionId]
+    );
     const segments: Segment[] = [];
     for (let i = 0; i < results.rows.length; i++) {
       segments.push(results.rows.item(i));
@@ -101,10 +111,36 @@ export const Database = {
     return segments;
   },
 
+  /**
+   * Optimized: Find exactly one segment containing the target timestamp.
+   */
+  getSegmentAtTime: async (sessionId: string, targetTimestamp: number): Promise<Segment | null> => {
+    if (!db) await initDB();
+    // Get the segment that started at or before the target time, closest to it.
+    const [results] = await db!.executeSql(
+      'SELECT * FROM segments WHERE sessionId = ? AND timestamp <= ? ORDER BY timestamp DESC LIMIT 1',
+      [sessionId, targetTimestamp]
+    );
+    if (results.rows.length > 0) {
+        return results.rows.item(0);
+    }
+    return null;
+  },
+
+  getSessionStart: async (sessionId: string): Promise<number | null> => {
+    if (!db) await initDB();
+    const [results] = await db!.executeSql(
+      'SELECT timestamp FROM segments WHERE sessionId = ? ORDER BY timestamp ASC LIMIT 1',
+      [sessionId]
+    );
+    if (results.rows.length > 0) return results.rows.item(0).timestamp;
+    return null;
+  },
+
   getSegmentsAfter: async (sessionId: string, timestamp: number): Promise<Segment[]> => {
     if (!db) await initDB();
     const [results] = await db!.executeSql(
-      'SELECT * FROM segments WHERE sessionId = ? AND timestamp > ? ORDER BY timestamp ASC',
+      'SELECT * FROM segments WHERE sessionId = ? AND timestamp > ? ORDER BY timestamp ASC LIMIT 2',
       [sessionId, timestamp]
     );
     const segments: Segment[] = [];
@@ -147,10 +183,9 @@ export const Database = {
 
   getAnnotations: async (sessionId: string, timestamp: number): Promise<AnnotationData[]> => {
     if (!db) await initDB();
-    // Get annotations for a specific video time (approximate within small window)
     const [results] = await db!.executeSql(
-      'SELECT * FROM annotations WHERE sessionId = ? AND ABS(timestamp - ?) < 0.1',
-      [sessionId, timestamp]
+      'SELECT * FROM annotations WHERE sessionId = ? AND timestamp >= ? AND timestamp <= ?',
+      [sessionId, timestamp - 0.1, timestamp + 0.1]
     );
     const annotations: AnnotationData[] = [];
     for (let i = 0; i < results.rows.length; i++) {

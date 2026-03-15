@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Dimensions } from 'react-native';
 import Video from 'react-native-video';
 import { Segment } from '../types';
@@ -10,13 +10,14 @@ interface SeamlessPlayerProps {
   nextSegment: Segment | null;
   onSegmentEnd: () => void;
   onProgress: (data: { currentTime: number }) => void;
-  onLoad: () => void;
+  onLoad: (segment: Segment) => void;
   paused: boolean;
   rate: number;
 }
 
 export interface SeamlessPlayerRef {
   seek: (time: number) => void;
+  prepareSeek: (segment: Segment, offset: number) => void;
 }
 
 export const SeamlessPlayer = React.forwardRef<SeamlessPlayerRef, SeamlessPlayerProps>((props, ref) => {
@@ -31,34 +32,64 @@ export const SeamlessPlayer = React.forwardRef<SeamlessPlayerRef, SeamlessPlayer
   } = props;
 
   const [activePlayer, setActivePlayer] = useState<'A' | 'B'>('A');
+  const [seekingSegment, setSeekingSegment] = useState<Segment | null>(null);
   
   const playerARef = useRef<Video>(null);
   const playerBRef = useRef<Video>(null);
+  const seekTargetRef = useRef<number | null>(null);
+  const isSwappingRef = useRef(false);
 
   React.useImperativeHandle(ref, () => ({
     seek: (time: number) => {
       const activeRef = activePlayer === 'A' ? playerARef : playerBRef;
       activeRef.current?.seek(time);
+    },
+    /**
+     * Prepares a seek into a DIFFERENT segment using the background player.
+     */
+    prepareSeek: (segment: Segment, offset: number) => {
+        isSwappingRef.current = true;
+        seekTargetRef.current = offset;
+        setSeekingSegment(segment);
     }
   }));
 
-  useEffect(() => {
-    if (currentSegment) {
-        onLoad();
-    }
-  }, [currentSegment?.id]);
+  const handleReadyForDisplay = (id: 'A' | 'B') => {
+      // If the background player just loaded our seek target, SWAP NOW
+      if (isSwappingRef.current && activePlayer !== id && seekingSegment) {
+          const finishedSegment = seekingSegment;
+          setActivePlayer(id);
+          setSeekingSegment(null);
+          isSwappingRef.current = false;
+          
+          // Apply initial offset if needed
+          if (seekTargetRef.current !== null) {
+              const targetRef = id === 'A' ? playerARef : playerBRef;
+              targetRef.current?.seek(seekTargetRef.current);
+              seekTargetRef.current = null;
+          }
+          
+          onLoad(finishedSegment); // Notify parent that swap is complete
+      }
+  };
 
   const handleEnd = () => {
+    if (isSwappingRef.current) return;
     setActivePlayer(prev => prev === 'A' ? 'B' : 'A');
     onSegmentEnd();
   };
 
   const renderPlayer = (id: 'A' | 'B') => {
     const isPrimary = activePlayer === id;
-    const segment = isPrimary ? currentSegment : nextSegment;
+    const isSeeking = !isPrimary && seekingSegment !== null;
+    
+    // 1. If primary, use currentSegment.
+    // 2. If seeking (background), use seekingSegment.
+    // 3. Otherwise, use nextSegment (pre-buffer).
+    let segment = isPrimary ? currentSegment : (isSeeking ? seekingSegment : nextSegment);
     const refForPlayer = id === 'A' ? playerARef : playerBRef;
 
-    if (!segment) return <View style={styles.hidden} />;
+    if (!segment) return <View key={`empty-${id}`} style={styles.hidden} />;
 
     return (
       <Video
@@ -67,18 +98,18 @@ export const SeamlessPlayer = React.forwardRef<SeamlessPlayerRef, SeamlessPlayer
         source={{ uri: segment.path }}
         style={[
             isPrimary ? styles.visibleVideo : styles.hiddenVideo,
-            { opacity: 0.99 } // HACK: Force hardware layer composition to respect zIndex
+            { opacity: 0.99 }
         ]}
         resizeMode="contain"
-        paused={isPrimary ? paused : true}
+        paused={isPrimary ? paused : false} // Background must be unpaused to trigger 'Ready'
         rate={rate}
         onEnd={isPrimary ? handleEnd : undefined}
         onProgress={isPrimary ? onProgress : undefined}
-        onLoad={onLoad}
+        onReadyForDisplay={() => handleReadyForDisplay(id)}
         playInBackground={true}
         disableFocus={true}
         shutterColor="transparent"
-        useTextureView={true} // Use TextureView instead of SurfaceView for z-index support
+        useTextureView={true}
       />
     );
   };
@@ -93,7 +124,7 @@ export const SeamlessPlayer = React.forwardRef<SeamlessPlayerRef, SeamlessPlayer
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
-  visibleVideo: { width: width, height: height, position: 'absolute' },
-  hiddenVideo: { width: 1, height: 1, position: 'absolute', opacity: 0 },
+  visibleVideo: { width: width, height: height, position: 'absolute', zIndex: 10 },
+  hiddenVideo: { width: 1, height: 1, position: 'absolute', opacity: 0, zIndex: 1 },
   hidden: { width: 0, height: 0 },
 });

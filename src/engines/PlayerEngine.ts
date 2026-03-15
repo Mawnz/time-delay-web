@@ -20,19 +20,13 @@ export class PlayerEngine {
   }
 
   /**
-   * Finds the segment that should be playing based on current real-world time and delay.
+   * Optimized: Jump straight to the segment covering (RealTime - Delay).
    */
   public async getInitialSegment(): Promise<Segment | null> {
     if (!this.sessionId) return null;
 
     const targetTimestamp = Date.now() - (this.delaySeconds * 1000);
-    const segments = await Database.getSegments(this.sessionId);
-    
-    // Find the segment that covers targetTimestamp
-    const current = segments.find(s => 
-      targetTimestamp >= s.timestamp && 
-      targetTimestamp <= (s.timestamp + (s.duration * 1000) + 1000)
-    );
+    const current = await Database.getSegmentAtTime(this.sessionId, targetTimestamp);
 
     if (current) {
       this.currentSegment = current;
@@ -42,26 +36,24 @@ export class PlayerEngine {
     return null;
   }
 
+  /**
+   * Optimized: Target a specific timestamp without scanning arrays.
+   */
   public async getSegmentForTime(timeInSeconds: number): Promise<{ segment: Segment, offsetMs: number } | null> {
     if (!this.sessionId) return null;
 
-    const segments = await Database.getSegments(this.sessionId);
-    if (segments.length === 0) return null;
+    const sessionStartTs = await Database.getSessionStart(this.sessionId);
+    if (sessionStartTs === null) return null;
 
-    const sessionStartTs = segments[0].timestamp;
     const targetTs = sessionStartTs + (timeInSeconds * 1000);
-
-    const segment = segments.find(s => 
-      targetTs >= s.timestamp && 
-      targetTs <= (s.timestamp + (s.duration * 1000) + 500)
-    );
+    const segment = await Database.getSegmentAtTime(this.sessionId, targetTs);
 
     if (segment) {
       this.currentSegment = segment;
-      this.nextSegment = null; // Clear pre-fetch on seek
+      this.nextSegment = null;
       return {
         segment,
-        offsetMs: targetTs - segment.timestamp
+        offsetMs: Math.max(0, targetTs - segment.timestamp)
       };
     }
 
@@ -71,7 +63,6 @@ export class PlayerEngine {
   public async getNextSegment(): Promise<Segment | null> {
     if (!this.sessionId || !this.currentSegment) return null;
 
-    // Use a small 100ms offset to avoid finding the current segment again
     const nextSegments = await Database.getSegmentsAfter(this.sessionId, this.currentSegment.timestamp + 100);
     if (nextSegments.length > 0) {
       this.nextSegment = nextSegments[0];
@@ -82,13 +73,11 @@ export class PlayerEngine {
 
   public onSegmentEnd(): Segment | null {
     if (this.nextSegment) {
-      console.log('Transitioning to next segment:', this.nextSegment.path);
       this.currentSegment = this.nextSegment;
       const transitionTo = this.nextSegment;
       this.nextSegment = null;
       return transitionTo;
     }
-    console.log('No next segment available yet at end of current.');
     return null;
   }
 }
