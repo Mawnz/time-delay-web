@@ -41,7 +41,14 @@ This phase upgraded the stable engine into a professional technical analysis too
 - [x] **Fluid Scrubbing**: Users can seek the timeline by swiping anywhere on the video.
 - [x] **Zoom Analysis**: Users can pinch into the video to inspect technical details.
 - [x] **Pro Look**: The app feels like a premium technical analysis suite.
-- [x] **Stable**: No thumbnail flashes, no playback jumps, no accidental deletions.
+- [ ] **Stable**: **REGRESSION**: Choppy segment transitions (1-2s jumps) and unreliable PIP layering on Android hardware.
+
+---
+
+## Persistent Issues & Regressions
+- [ ] **Segment Boundary Jump**: 1-2s gap in footage during file finalization in the `RecorderEngine`.
+- [ ] **Layering Instability**: PIP camera still falls behind delayed video on certain devices.
+- [ ] **Scrubbing Jank**: Simultaneous thumbnail generation and timeline scrubbing causes JS thread lag.
 
 ---
 

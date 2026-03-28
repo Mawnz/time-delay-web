@@ -118,4 +118,15 @@ See [`GEMINI.md`](./GEMINI.md) for the full technical context used during AI-ass
 
 ---
 
+## Known Issues
+
+Despite recent optimizations, the following issues are currently present in the Android implementation:
+
+- **Choppy Segment Transitions**: When playback reaches the end of a 5-second segment, there is a visible 1-2 second jump or "skip" in the video stream. This is caused by the overhead of native file finalization and player re-buffering.
+- **Unstable PIP Layering**: The live preview (PIP) window frequently falls behind the main video playback layer on certain Android hardware, even when using `TextureView` and high `zIndex`.
+- **Minimized PIP UI**: The toggle button/badge for the minimized PIP state can become visually obscured or hard to find depending on the background video brightness.
+- **Timeline Performance**: Rapid thumbnail updates and timeline scrubbing can still cause UI jank and "stuck" frames during heavy recording sessions.
+
+---
+
 *Original Capacitor/web prototype is preserved in `legacy/`.*

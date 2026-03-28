@@ -2,7 +2,12 @@
 
 > [!IMPORTANT]
 > **Status**: Phase 3 Pro Analysis & Fluidity COMPLETE.
-> The app now features a full gesture engine (swipe-to-scrub, pinch-zoom, two-finger pan), frame-precise stepping, a clean popover-based UI, and hardened recording/session management. Phase 4 begins next.
+> While core gestures and pro UI are implemented, the application is currently suffering from **performance regressions**: segment transitions are choppy (1-2s jumps), and PIP layering remains unstable on Android.
+
+## Current Blockers & Regressions
+- **Segment Boundary Jump**: 1-2s gap in footage during file finalization in the `RecorderEngine`.
+- **Layering Instability**: `androidPreviewViewType="texture-view"` does not consistently stay on top of the main player.
+- **Scrubbing Jank**: Simultaneous thumbnail generation and timeline scrubbing causes significant JS thread lag.
 
 ## Core Stack
 - **Framework**: React Native 0.84.1 (Bare CLI)
