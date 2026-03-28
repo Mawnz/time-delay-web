@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Dimensions } from 'react-native';
-import Video from 'react-native-video';
+import Video, { VideoRef } from 'react-native-video';
 import { Segment } from '../types';
 
 const { width, height } = Dimensions.get('window');
@@ -13,6 +13,7 @@ interface SeamlessPlayerProps {
   onLoad: (segment: Segment) => void;
   paused: boolean;
   rate: number;
+  muted?: boolean;
 }
 
 export interface SeamlessPlayerRef {
@@ -29,13 +30,14 @@ export const SeamlessPlayer = React.forwardRef<SeamlessPlayerRef, SeamlessPlayer
     onLoad,
     paused,
     rate,
+    muted = false,
   } = props;
 
   const [activePlayer, setActivePlayer] = useState<'A' | 'B'>('A');
   const [seekingSegment, setSeekingSegment] = useState<Segment | null>(null);
   
-  const playerARef = useRef<Video>(null);
-  const playerBRef = useRef<Video>(null);
+  const playerARef = useRef<VideoRef>(null);
+  const playerBRef = useRef<VideoRef>(null);
   const seekTargetRef = useRef<number | null>(null);
   const isSwappingRef = useRef(false);
 
@@ -103,6 +105,7 @@ export const SeamlessPlayer = React.forwardRef<SeamlessPlayerRef, SeamlessPlayer
         resizeMode="contain"
         paused={isPrimary ? paused : false} // Background must be unpaused to trigger 'Ready'
         rate={rate}
+        muted={muted}
         onEnd={isPrimary ? handleEnd : undefined}
         onProgress={isPrimary ? onProgress : undefined}
         onReadyForDisplay={() => handleReadyForDisplay(id)}

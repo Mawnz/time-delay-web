@@ -1,8 +1,30 @@
-# Revised Roadmap for Production-Ready Sports Analytics Tool
+# Roadmap — Time Delay Video Analysis (React Native)
 
-This roadmap outlines the steps taken to evolve the Time Delay Video Playback application into a production-ready tool for elite athletes.
+> **Note**: This roadmap was originally written for the Capacitor/web prototype (now in `legacy/`).
+> Phases 1–3 below reflect the **React Native rewrite** milestones. See `CHANGELOG.md` for detailed history.
 
-## Phase 1: Production Readiness & Core Usability (`✅ DONE`)
+## Phase 1: React Native Migration (`✅ DONE`)
+- Bare CLI project, `react-native-vision-camera`, `react-native-video`, SQLite persistence.
+- 5-second segmented MP4 recording loop.
+
+## Phase 2: Performance & Professional Timeline (`✅ DONE`)
+- Seamless ping-pong seeking (dual `Video` component swap, zero black-flash).
+- Professional timeline: adaptive ruler, gapless filmstrip, A-B selection dimming.
+- Hook extraction (`useRecorder`, `usePlayerSync`, `useSessionData`).
+- Android layering fix (`texture-view` + `opacity: 0.99`).
+- SQLite composite index + targeted queries (no full-table scans).
+
+## Phase 3: Pro Analysis & Fluidity (`✅ DONE`)
+- **Gesture Engine**: swipe-to-scrub, pinch-zoom (1×–5×), two-finger pan.
+- **Frame Stepping**: ⏮ / ⏭ buttons, `1/30 s` precision, auto-pause.
+- **Seek Indicator**: animated `MM:SS.f` overlay during scrubbing.
+- **Focus Lock + Audio Mute**: toggles in `SettingsMenu`.
+- **Clean UI**: `StatusPill` + `MenuButton ⋯` top bar; bottom-sheet settings menu.
+- **Bug fixes**: thumbnail flash, choppy playback (id-based segment lookup), active-session delete protection, graceful recording transitions.
+
+## Phase 4: Next-Generation Features (`PLANNED`)
+
+
 
 ### 1.1 Secure Environment Setup (Mobile Access) (`✅ DONE`)
 *   **Objective:** Enable reliable camera access on mobile devices by ensuring the development environment supports HTTPS.

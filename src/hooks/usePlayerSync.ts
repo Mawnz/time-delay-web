@@ -1,6 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { playerEngine } from '../engines/PlayerEngine';
 import { Segment } from '../types';
+
+/** Duration of a single frame step (30fps default). */
+const FRAME_DURATION_S = 1 / 30;
 import { SeamlessPlayerRef } from '../components/SeamlessPlayer';
 
 interface PlayerSyncOptions {
@@ -11,10 +14,12 @@ interface PlayerSyncOptions {
   pointA: number | null;
   pointB: number | null;
   sessionStartTime: number | null;
+  /** Total session duration in seconds (from useSessionData), used by stepFrame clamping. */
+  duration: number;
 }
 
 export const usePlayerSync = (options: PlayerSyncOptions) => {
-  const { sessionId, delay, isPaused, loopEnabled, pointA, pointB, sessionStartTime } = options;
+  const { sessionId, delay, isPaused, loopEnabled, pointA, pointB, sessionStartTime, duration } = options;
 
   const [currentSegment, setCurrentSegment] = useState<Segment | null>(null);
   const [nextSegment, setNextSegment] = useState<Segment | null>(null);
@@ -45,7 +50,7 @@ export const usePlayerSync = (options: PlayerSyncOptions) => {
     seekFailSafeRef.current = setTimeout(() => {
         console.warn('Seek fail-safe triggered');
         isSeekingRef.current = false;
-    }, 3000); // 3s fail-safe for background load
+    }, 3000) as unknown as NodeJS.Timeout; // 3s fail-safe for background load
 
     const result = await playerEngine.getSegmentForTime(time);
     if (result) {
@@ -66,6 +71,27 @@ export const usePlayerSync = (options: PlayerSyncOptions) => {
         clearSeekFailSafe();
     }
   }, []);
+
+  /**
+   * Step exactly one frame forward (+1) or backward (-1).
+   * Unlike handleSeek, this bypasses the isSeekingRef guard so it always
+   * responds while paused. It forces a pause-friendly direct seek.
+   */
+  const stepFrame = useCallback(
+    (direction: 1 | -1) => {
+      const durationRef = duration; // capture from options
+      setCurrentTime(prev => {
+        const next = Math.max(0, Math.min(durationRef, prev + direction * FRAME_DURATION_S));
+        // Fire seek on next tick to let state settle
+        setTimeout(() => {
+          isSeekingRef.current = false; // ensure guard is clear
+          handleSeek(next);
+        }, 0);
+        return next;
+      });
+    },
+    [duration, handleSeek],
+  );
 
   const onVideoLoad = useCallback((loadedSegment: Segment) => {
     // Called when the SeamlessPlayer has finished the background swap
@@ -135,7 +161,7 @@ export const usePlayerSync = (options: PlayerSyncOptions) => {
         const next = await playerEngine.getNextSegment();
         if (next) setNextSegment(next);
       }
-    }, 1000);
+    }, 1000) as unknown as NodeJS.Timeout;
 
     return () => {
         if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
@@ -152,6 +178,7 @@ export const usePlayerSync = (options: PlayerSyncOptions) => {
     playbackRate,
     setPlaybackRate,
     handleSeek,
+    stepFrame,
     onVideoLoad,
     onProgress,
     onSegmentEnd

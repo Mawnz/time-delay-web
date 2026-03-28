@@ -63,9 +63,10 @@ export class PlayerEngine {
   public async getNextSegment(): Promise<Segment | null> {
     if (!this.sessionId || !this.currentSegment) return null;
 
-    const nextSegments = await Database.getSegmentsAfter(this.sessionId, this.currentSegment.timestamp + 100);
-    if (nextSegments.length > 0) {
-      this.nextSegment = nextSegments[0];
+    // Query by id (not timestamp) — robust to any timestamp gap between segments.
+    const results = await Database.getSegmentsAfterId(this.sessionId, this.currentSegment.id);
+    if (results.length > 0) {
+      this.nextSegment = results[0];
       return this.nextSegment;
     }
     return null;
@@ -78,6 +79,7 @@ export class PlayerEngine {
       this.nextSegment = null;
       return transitionTo;
     }
+    // Pre-fetch wasn't ready — return null to signal the hook to do a live lookup
     return null;
   }
 }

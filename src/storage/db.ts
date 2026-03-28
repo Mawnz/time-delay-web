@@ -150,6 +150,20 @@ export const Database = {
     return segments;
   },
 
+  /** Fetch the next segment(s) by id — immune to timestamp drift. */
+  getSegmentsAfterId: async (sessionId: string, afterId: number): Promise<Segment[]> => {
+    if (!db) await initDB();
+    const [results] = await db!.executeSql(
+      'SELECT * FROM segments WHERE sessionId = ? AND id > ? ORDER BY id ASC LIMIT 2',
+      [sessionId, afterId]
+    );
+    const segments: Segment[] = [];
+    for (let i = 0; i < results.rows.length; i++) {
+      segments.push(results.rows.item(i));
+    }
+    return segments;
+  },
+
   // Thumbnails
   addThumbnail: async (sessionId: string, path: string, timestamp: number) => {
     if (!db) await initDB();

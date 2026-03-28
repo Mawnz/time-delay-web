@@ -6,8 +6,9 @@ import { Database } from '../storage/db';
 export const useRecorder = () => {
   const [hasPermission, setHasPermission] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isRecordingTransition, setIsRecordingTransition] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const cameraRef = useRef<Camera>(null);
+  const cameraRef = useRef<Camera>(null) as React.RefObject<Camera>;
 
   const checkPermissions = useCallback(async () => {
     const cameraStatus = Camera.getCameraPermissionStatus();
@@ -33,24 +34,40 @@ export const useRecorder = () => {
   }, [cameraRef.current]);
 
   const startRecording = useCallback(async (delay: number) => {
-    const newSessionId = Date.now().toString();
-    setSessionId(newSessionId);
-    
-    await Database.createSession(newSessionId, `Session ${new Date().toLocaleTimeString()}`);
-    await recorderEngine.start({ sessionId: newSessionId, segmentDurationMs: 5000 });
-    
-    setIsRecording(true);
-    return newSessionId;
-  }, []);
+    if (isRecordingTransition || isRecording) return;
+    setIsRecordingTransition(true);
+    try {
+      const newSessionId = Date.now().toString();
+      await Database.createSession(newSessionId, `Session ${new Date().toLocaleTimeString()}`);
+      await recorderEngine.start({ sessionId: newSessionId, segmentDurationMs: 5000 });
+      setSessionId(newSessionId);
+      setIsRecording(true);
+      return newSessionId;
+    } catch (e) {
+      console.error('Failed to start recording:', e);
+    } finally {
+      setIsRecordingTransition(false);
+    }
+  }, [isRecording, isRecordingTransition]);
 
   const stopRecording = useCallback(async () => {
-    await recorderEngine.stop();
-    setIsRecording(false);
-  }, []);
+    if (isRecordingTransition || !isRecording) return;
+    setIsRecordingTransition(true);
+    try {
+      await recorderEngine.stop();
+      setIsRecording(false);
+    } catch (e) {
+      console.error('Failed to stop recording:', e);
+      setIsRecording(false); // Force reset on error
+    } finally {
+      setIsRecordingTransition(false);
+    }
+  }, [isRecording, isRecordingTransition]);
 
   return {
     hasPermission,
     isRecording,
+    isRecordingTransition,
     sessionId,
     cameraRef,
     startRecording,
