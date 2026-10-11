@@ -29,8 +29,8 @@ export const usePlayerSync = (options: PlayerSyncOptions) => {
   const playerRef = useRef<SeamlessPlayerRef>(null);
   const currentSegmentRef = useRef<Segment | null>(null);
   const isSeekingRef = useRef(false);
-  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const seekFailSafeRef = useRef<NodeJS.Timeout | null>(null);
+  const syncIntervalRef = useRef<any>(null);
+  const seekFailSafeRef = useRef<any>(null);
   const lastProgressUpdate = useRef(0);
 
   const clearSeekFailSafe = () => {
@@ -50,7 +50,7 @@ export const usePlayerSync = (options: PlayerSyncOptions) => {
     seekFailSafeRef.current = setTimeout(() => {
         console.warn('Seek fail-safe triggered');
         isSeekingRef.current = false;
-    }, 3000) as unknown as NodeJS.Timeout; // 3s fail-safe for background load
+    }, 3000); // 3s fail-safe for background load
 
     const result = await playerEngine.getSegmentForTime(time);
     if (result) {
@@ -161,7 +161,7 @@ export const usePlayerSync = (options: PlayerSyncOptions) => {
         const next = await playerEngine.getNextSegment();
         if (next) setNextSegment(next);
       }
-    }, 1000) as unknown as NodeJS.Timeout;
+    }, 1000);
 
     return () => {
         if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);

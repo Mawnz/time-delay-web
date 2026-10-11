@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { View, StyleSheet, Dimensions, ScrollView, Image, TouchableOpacity, PanResponder, Text } from 'react-native';
 import { Thumbnail } from '../types';
 
@@ -81,6 +81,8 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
   const panA = useRef(createPanResponder('A')).current;
   const panB = useRef(createPanResponder('B')).current;
 
+  const [scrollX, setScrollX] = useState(0);
+
   const renderRuler = () => {
     const ticks = [];
     // Adjust intervals based on zoom
@@ -124,6 +126,7 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
         scrollEventThrottle={32}
         onScrollBeginDrag={() => { isInteracting.current = true; }}
         onScrollEndDrag={() => { isInteracting.current = false; }}
+        onScroll={(e) => setScrollX(e.nativeEvent.contentOffset.x)}
         contentContainerStyle={{ minWidth: SCREEN_WIDTH }}
       >
         <TouchableOpacity 
@@ -154,8 +157,13 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
               {thumbnails.map((t) => {
                 const startTime = sessionStartTime || (thumbnails.length > 0 ? thumbnails[0].timestamp : 0);
                 const pos = ((t.timestamp - startTime) / 1000) * zoomLevel;
-                // Since segments are 5s, width should be 5 * zoomLevel
                 const thumbWidth = 5 * zoomLevel;
+
+                // Virtualization: Only render if within visible window (+/- 1 screen width buffer)
+                const isVisible = pos + thumbWidth >= scrollX - SCREEN_WIDTH && pos <= scrollX + SCREEN_WIDTH * 2;
+
+                if (!isVisible) return null;
+
                 return (
                   <Image 
                     key={t.id}

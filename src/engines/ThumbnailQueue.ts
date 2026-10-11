@@ -28,11 +28,17 @@ export class ThumbnailQueue {
       // Wait for all in-flight interactions (animations, camera segment switches)
       // to complete before doing any heavy work — prevents the thumbnail decode
       // from coinciding with the camera surface switch and causing a flash.
-      await new Promise<void>(resolve =>
-        InteractionManager.runAfterInteractions(() => resolve()),
-      );
+      await new Promise<void>(resolve => {
+        InteractionManager.runAfterInteractions({
+          name: 'resolve',
+          gen: () => {
+            resolve();
+            return Promise.resolve();
+          }
+        });
+      });
       // Additional idle buffer so the next segment has fully initialised
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 2000));
 
       const thumbnail = await createThumbnail({
         url: task.path,
