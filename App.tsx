@@ -374,6 +374,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 100,
     elevation: 10,
+    borderWidth: 0,
     pointerEvents: 'box-none',
   },
 
@@ -387,6 +388,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     zIndex: 200,
+    elevation: 20,
   },
 
   // Camera PiP
@@ -397,6 +399,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#007AFF',
     backgroundColor: '#111',
+    elevation: 20,
     overflow: 'hidden',
   },
   cameraPreviewMinimized: {
