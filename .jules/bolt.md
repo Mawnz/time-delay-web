@@ -1,0 +1,3 @@
+## 2024-10-24 - Timeline Component Render Optimization
+**Learning:** In highly interactive React Native video apps, components that receive frequent updates (like `currentTime` updating 10x/sec or `scrollX` on every frame) are prone to severe performance bottlenecks if they recreate large lists of elements on every render. The `Timeline` component was rebuilding its ruler ticks (potentially hundreds of Views/Texts) and calculating constant variables inside loops on every playback frame.
+**Action:** Use `useMemo` for static or infrequently-changing list generations (like rulers depending only on `duration` and `zoomLevel`), and always hoist invariant calculations out of loops (like `startTime` in the thumbnails map) to minimize per-frame overhead.
