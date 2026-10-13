@@ -36,11 +36,18 @@ export const useSessionData = (sessionId: string | null, isRecording: boolean) =
       }
 
       // 3. Update duration
-      const segments = await Database.getSegments(sessionId);
-      if (segments.length > 0) {
-        const firstTs = segments[0].timestamp;
-        const lastTs = segments[segments.length - 1].timestamp + (segments[segments.length - 1].duration * 1000);
-        setDuration((lastTs - firstTs) / 1000);
+      // OPTIMIZATION: Instead of loading ALL segments (O(N)), we just need the start and end (O(1)).
+      let firstTs = sessionStartTime;
+      if (firstTs === null) {
+          firstTs = await Database.getSessionStart(sessionId);
+      }
+
+      if (firstTs !== null) {
+          const lastSegment = await Database.getLastSegment(sessionId);
+          if (lastSegment) {
+              const lastTs = lastSegment.timestamp + (lastSegment.duration * 1000);
+              setDuration((lastTs - firstTs) / 1000);
+          }
       }
     } catch (e) {
       console.error('Session data fetch error:', e);
