@@ -83,7 +83,7 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
 
   const [scrollX, setScrollX] = useState(0);
 
-  const renderRuler = () => {
+  const rulerTicks = useMemo(() => {
     const ticks = [];
     // Adjust intervals based on zoom
     let step = 5; // Label every 5s by default
@@ -99,7 +99,7 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
       );
     }
     return ticks;
-  };
+  }, [duration, zoomLevel]);
 
   const selectionStyle = useMemo(() => {
     if (pointA === null || pointB === null) return null;
@@ -110,6 +110,25 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
       width: Math.max(2, end - start),
     };
   }, [pointA, pointB, zoomLevel]);
+
+  const renderedThumbnails = useMemo(() => thumbnails.map((t) => {
+    const startTime = sessionStartTime || (thumbnails.length > 0 ? thumbnails[0].timestamp : 0);
+    const pos = ((t.timestamp - startTime) / 1000) * zoomLevel;
+    const thumbWidth = 5 * zoomLevel;
+
+    // Virtualization: Only render if within visible window (+/- 1 screen width buffer)
+    const isVisible = pos + thumbWidth >= scrollX - SCREEN_WIDTH && pos <= scrollX + SCREEN_WIDTH * 2;
+
+    if (!isVisible) return null;
+
+    return (
+      <Image
+        key={t.id}
+        source={{ uri: 'file://' + t.path }}
+        style={[styles.thumbnail, { position: 'absolute', left: pos, width: thumbWidth }]}
+      />
+    );
+  }), [thumbnails, sessionStartTime, zoomLevel, scrollX]);
 
   return (
     <View style={styles.container}>
@@ -137,7 +156,7 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
           <View style={[styles.timelineContent, { width: Math.max(totalWidth, SCREEN_WIDTH) }]}>
             {/* 1. Ruler Layer */}
             <View style={styles.rulerLayer}>
-                {renderRuler()}
+                {rulerTicks}
             </View>
 
             {/* 2. Selection / Loop Layer */}
@@ -154,24 +173,7 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
 
             {/* 3. Thumbnails Layer (Filmstrip) */}
             <View pointerEvents="none" style={styles.thumbnailsLayer}>
-              {thumbnails.map((t) => {
-                const startTime = sessionStartTime || (thumbnails.length > 0 ? thumbnails[0].timestamp : 0);
-                const pos = ((t.timestamp - startTime) / 1000) * zoomLevel;
-                const thumbWidth = 5 * zoomLevel;
-
-                // Virtualization: Only render if within visible window (+/- 1 screen width buffer)
-                const isVisible = pos + thumbWidth >= scrollX - SCREEN_WIDTH && pos <= scrollX + SCREEN_WIDTH * 2;
-
-                if (!isVisible) return null;
-
-                return (
-                  <Image 
-                    key={t.id}
-                    source={{ uri: 'file://' + t.path }} 
-                    style={[styles.thumbnail, { position: 'absolute', left: pos, width: thumbWidth }]} 
-                  />
-                );
-              })}
+              {renderedThumbnails}
             </View>
 
             {/* 4. Draggable Handles */}
