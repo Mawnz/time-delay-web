@@ -137,6 +137,19 @@ export const Database = {
     return null;
   },
 
+  /**
+   * Optimized: Get only the most recent segment to calculate duration efficiently.
+   */
+  getLastSegment: async (sessionId: string): Promise<Segment | null> => {
+    if (!db) await initDB();
+    const [results] = await db!.executeSql(
+      'SELECT * FROM segments WHERE sessionId = ? ORDER BY timestamp DESC LIMIT 1',
+      [sessionId]
+    );
+    if (results.rows.length > 0) return results.rows.item(0);
+    return null;
+  },
+
   getSegmentsAfter: async (sessionId: string, timestamp: number): Promise<Segment[]> => {
     if (!db) await initDB();
     const [results] = await db!.executeSql(
