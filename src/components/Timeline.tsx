@@ -142,6 +142,25 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
     };
   }, [pointA, pointB, zoomLevel]);
 
+  const renderedThumbnails = useMemo(() => thumbnails.map((t) => {
+    const startTime = sessionStartTime || (thumbnails.length > 0 ? thumbnails[0].timestamp : 0);
+    const pos = ((t.timestamp - startTime) / 1000) * zoomLevel;
+    const thumbWidth = 5 * zoomLevel;
+
+    // Virtualization: Only render if within visible window (+/- 1 screen width buffer)
+    const isVisible = pos + thumbWidth >= scrollX - SCREEN_WIDTH && pos <= scrollX + SCREEN_WIDTH * 2;
+
+    if (!isVisible) return null;
+
+    return (
+      <Image
+        key={t.id}
+        source={{ uri: 'file://' + t.path }}
+        style={[styles.thumbnail, { position: 'absolute', left: pos, width: thumbWidth }]}
+      />
+    );
+  }), [thumbnails, sessionStartTime, zoomLevel, scrollX]);
+
   return (
     <View style={styles.container}>
       {/* Time Display Header */}
