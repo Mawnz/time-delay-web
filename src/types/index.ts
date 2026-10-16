@@ -27,7 +27,7 @@ export interface AnnotationData {
 }
 
 export interface DrawingPath {
-  points: { x: number; y: number; type: 'start' | 'draw' }[];
+  points: { x: number; y: number; type: 'start' | 'draw' | string }[];
   color: string;
   width: number;
 }

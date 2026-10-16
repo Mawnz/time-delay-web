@@ -226,6 +226,45 @@ export default function App() {
         )}
       </View>
 
+      {/* ── LAYER 1.5: CAMERA PIP (MIDDLE) ── */}
+      <View
+        style={[styles.pipContainer, isPipMinimized && styles.pipContainerMinimized]}
+        pointerEvents="box-none"
+      >
+        <View
+          style={[
+            styles.cameraPreview,
+            isPipMinimized && styles.cameraPreviewMinimized,
+          ]}
+        >
+          <Camera
+            key={cameraPosition}
+            ref={cameraRef}
+            style={isPipMinimized ? styles.hiddenCamera : StyleSheet.absoluteFill}
+            device={device}
+            isActive={true}
+            video={true}
+            audio={true}
+            androidPreviewViewType="texture-view"
+          />
+          {/* Tap whole PiP to toggle minimise */}
+          <View
+            style={StyleSheet.absoluteFill}
+            onTouchEnd={() => setIsPipMinimized(v => !v)}
+          />
+          {!isPipMinimized && (
+            <View style={isRecording ? styles.recBadge : styles.liveBadge}>
+              <Text style={styles.badgeText}>{isRecording ? '● REC' : 'LIVE'}</Text>
+            </View>
+          )}
+          {isPipMinimized && (
+            <View style={styles.minimizedBadge} pointerEvents="none">
+              <Text style={styles.minimizedBadgeText}>CAM</Text>
+            </View>
+          )}
+        </View>
+      </View>
+
       {/* ── LAYER 2: INTERACTIVE UI (TOP) ── */}
       <View style={styles.uiOverlay} pointerEvents="box-none">
 
@@ -244,43 +283,13 @@ export default function App() {
           strokeWidth={3}
         />
 
-        {/* ── Top bar: StatusPill (left) + PiP (centre-right) + MenuButton (right) ── */}
+        {/* ── Top bar: StatusPill (left) + MenuButton (right) ── */}
         <View style={styles.topBar} pointerEvents="box-none">
           <StatusPill
             isRecording={isRecording}
             isTransition={isRecordingTransition}
             onToggle={handleToggleRecording}
           />
-
-          {/* Camera PiP — now safely to the right of the status pill */}
-          <View
-            style={[
-              styles.cameraPreview,
-              isPipMinimized && styles.cameraPreviewMinimized,
-            ]}
-          >
-            <Camera
-              key={cameraPosition}
-              ref={cameraRef}
-              style={isPipMinimized ? styles.hiddenCamera : StyleSheet.absoluteFill}
-              device={device}
-              isActive={true}
-              video={true}
-              audio={true}
-              androidPreviewViewType="texture-view"
-            />
-            {/* Tap whole PiP to toggle minimise */}
-            <View
-              style={StyleSheet.absoluteFill}
-              onTouchEnd={() => setIsPipMinimized(v => !v)}
-            />
-            {!isPipMinimized && (
-              <View style={isRecording ? styles.recBadge : styles.liveBadge}>
-                <Text style={styles.badgeText}>{isRecording ? '● REC' : 'LIVE'}</Text>
-              </View>
-            )}
-          </View>
-
           <MenuButton onPress={() => setMenuVisible(true)} />
         </View>
 
@@ -391,6 +400,18 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
 
+  // Camera PiP Container
+  pipContainer: {
+    position: 'absolute',
+    top: 52,
+    right: 60, // Positioned between StatusPill and MenuButton
+    zIndex: 50, // Between video (1) and UI (100)
+    elevation: 5,
+  },
+  pipContainerMinimized: {
+    right: 60,
+  },
+
   // Camera PiP
   cameraPreview: {
     width: 90,
@@ -404,12 +425,27 @@ const styles = StyleSheet.create({
   },
   cameraPreviewMinimized: {
     width: 52,
-    height: 22,
+    height: 24,
     borderRadius: 8,
-    borderWidth: 0,
-    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  hiddenCamera: { width: 1, height: 1, opacity: 0 },
+  hiddenCamera: { width: 1, height: 1, opacity: 0, position: 'absolute' },
+  minimizedBadge: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  minimizedBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
   liveBadge: {
     position: 'absolute',
     top: 5,

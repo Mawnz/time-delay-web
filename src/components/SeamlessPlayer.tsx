@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import { StyleSheet, View, Dimensions } from 'react-native';
 import Video, { VideoRef } from 'react-native-video';
 import { Segment } from '../types';
@@ -77,6 +77,12 @@ export const SeamlessPlayer = React.forwardRef<SeamlessPlayerRef, SeamlessPlayer
 
   const handleEnd = () => {
     if (isSwappingRef.current) return;
+
+    // The incoming player played in the background to buffer.
+    // We must seek it to 0 right as we swap so it starts from the first frame.
+    const incomingPlayer = activePlayer === 'A' ? playerBRef : playerARef;
+    incomingPlayer.current?.seek(0);
+
     setActivePlayer(prev => prev === 'A' ? 'B' : 'A');
     onSegmentEnd();
   };

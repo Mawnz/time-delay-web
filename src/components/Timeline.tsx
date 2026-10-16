@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { View, StyleSheet, Dimensions, ScrollView, Image, TouchableOpacity, PanResponder, Text } from 'react-native';
 import { Thumbnail } from '../types';
 
@@ -89,7 +89,11 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
   const panA = useRef(createPanResponder('A')).current;
   const panB = useRef(createPanResponder('B')).current;
 
-  const renderRuler = () => {
+  const [scrollX, setScrollX] = useState(0);
+
+  // BOLT OPTIMIZATION: Memoize O(N) iterative ruler rendering.
+  // currentTime updates ~10x/sec from App.tsx, so we must prevent rebuilding the ruler every frame.
+  const rulerTicks = useMemo(() => {
     const ticks = [];
     // Adjust intervals based on zoom
     let step = 5; // Label every 5s by default
@@ -105,7 +109,28 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
       );
     }
     return ticks;
-  };
+  }, [duration, zoomLevel]);
+
+  // BOLT OPTIMIZATION: Memoize O(N) array mapping for thumbnails.
+  // Prevents re-calculating positions and re-rendering images 10x/sec on currentTime updates.
+  const renderedThumbnails = useMemo(() => thumbnails.map((t) => {
+    const startTime = sessionStartTime || (thumbnails.length > 0 ? thumbnails[0].timestamp : 0);
+    const pos = ((t.timestamp - startTime) / 1000) * zoomLevel;
+    const thumbWidth = 5 * zoomLevel;
+
+    // Virtualization: Only render if within visible window (+/- 1 screen width buffer)
+    const isVisible = pos + thumbWidth >= scrollX - SCREEN_WIDTH && pos <= scrollX + SCREEN_WIDTH * 2;
+
+    if (!isVisible) return null;
+
+    return (
+      <Image
+        key={t.id}
+        source={{ uri: 'file://' + t.path }}
+        style={[styles.thumbnail, { position: 'absolute', left: pos, width: thumbWidth }]}
+      />
+    );
+  }), [thumbnails, sessionStartTime, zoomLevel, scrollX]);
 
   const selectionStyle = useMemo(() => {
     if (pointA === null || pointB === null) return null;
@@ -133,6 +158,7 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
         onScroll={handleScroll}
         onScrollBeginDrag={() => { isInteracting.current = true; }}
         onScrollEndDrag={() => { isInteracting.current = false; }}
+        onScroll={(e) => setScrollX(e.nativeEvent.contentOffset.x)}
         contentContainerStyle={{ minWidth: SCREEN_WIDTH }}
       >
         <TouchableOpacity 
@@ -143,7 +169,7 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
           <View style={[styles.timelineContent, { width: Math.max(totalWidth, SCREEN_WIDTH) }]}>
             {/* 1. Ruler Layer */}
             <View style={styles.rulerLayer}>
-                {renderRuler()}
+                {rulerTicks}
             </View>
 
             {/* 2. Selection / Loop Layer */}
@@ -160,22 +186,7 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
 
             {/* 3. Thumbnails Layer (Filmstrip) */}
             <View pointerEvents="none" style={styles.thumbnailsLayer}>
-              {thumbnails.map((t) => {
-                const startTime = sessionStartTime || (thumbnails.length > 0 ? thumbnails[0].timestamp : 0);
-                const pos = ((t.timestamp - startTime) / 1000) * zoomLevel;
-                // Since segments are 5s, width should be 5 * zoomLevel
-                const thumbWidth = 5 * zoomLevel;
-
-                if (pos + thumbWidth < visibleStart || pos > visibleEnd) return null;
-
-                return (
-                  <Image 
-                    key={t.id}
-                    source={{ uri: 'file://' + t.path }} 
-                    style={[styles.thumbnail, { position: 'absolute', left: pos, width: thumbWidth }]} 
-                  />
-                );
-              })}
+              {renderedThumbnails}
             </View>
 
             {/* 4. Draggable Handles */}
