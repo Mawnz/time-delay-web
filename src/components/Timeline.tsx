@@ -36,6 +36,8 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
   const scrollRef = useRef<ScrollView>(null);
   const isInteracting = useRef(false);
   const dragStartTimeRef = useRef(0);
+  const [visibleStart, setVisibleStart] = useState(0);
+  const [visibleEnd, setVisibleEnd] = useState(SCREEN_WIDTH * 3);
   
   const latestPropsRef = useRef(props);
   useEffect(() => {
@@ -61,6 +63,12 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
     }
   }, [playheadPos, followPlayhead]);
 
+  const handleScroll = useCallback((e: any) => {
+    const x = e.nativeEvent.contentOffset.x;
+    setVisibleStart(Math.max(0, x - SCREEN_WIDTH));
+    setVisibleEnd(x + SCREEN_WIDTH * 2);
+  }, []);
+
   const createPanResponder = (point: 'A' | 'B') => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
@@ -83,6 +91,8 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
 
   const [scrollX, setScrollX] = useState(0);
 
+  // BOLT OPTIMIZATION: Memoize O(N) iterative ruler rendering.
+  // currentTime updates ~10x/sec from App.tsx, so we must prevent rebuilding the ruler every frame.
   const rulerTicks = useMemo(() => {
     const ticks = [];
     // Adjust intervals based on zoom
@@ -100,6 +110,27 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
     }
     return ticks;
   }, [duration, zoomLevel]);
+
+  // BOLT OPTIMIZATION: Memoize O(N) array mapping for thumbnails.
+  // Prevents re-calculating positions and re-rendering images 10x/sec on currentTime updates.
+  const renderedThumbnails = useMemo(() => thumbnails.map((t) => {
+    const startTime = sessionStartTime || (thumbnails.length > 0 ? thumbnails[0].timestamp : 0);
+    const pos = ((t.timestamp - startTime) / 1000) * zoomLevel;
+    const thumbWidth = 5 * zoomLevel;
+
+    // Virtualization: Only render if within visible window (+/- 1 screen width buffer)
+    const isVisible = pos + thumbWidth >= scrollX - SCREEN_WIDTH && pos <= scrollX + SCREEN_WIDTH * 2;
+
+    if (!isVisible) return null;
+
+    return (
+      <Image
+        key={t.id}
+        source={{ uri: 'file://' + t.path }}
+        style={[styles.thumbnail, { position: 'absolute', left: pos, width: thumbWidth }]}
+      />
+    );
+  }), [thumbnails, sessionStartTime, zoomLevel, scrollX]);
 
   const selectionStyle = useMemo(() => {
     if (pointA === null || pointB === null) return null;
@@ -142,7 +173,8 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
         ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        scrollEventThrottle={32}
+        scrollEventThrottle={16}
+        onScroll={handleScroll}
         onScrollBeginDrag={() => { isInteracting.current = true; }}
         onScrollEndDrag={() => { isInteracting.current = false; }}
         onScroll={(e) => setScrollX(e.nativeEvent.contentOffset.x)}

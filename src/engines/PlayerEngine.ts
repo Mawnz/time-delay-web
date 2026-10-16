@@ -25,7 +25,11 @@ export class PlayerEngine {
   public async getInitialSegment(): Promise<Segment | null> {
     if (!this.sessionId) return null;
 
-    const targetTimestamp = Date.now() - (this.delaySeconds * 1000);
+    // We need to buffer at least the segment duration (5s) + file finalization overhead (~2s)
+    // If delaySeconds is 5, and we just use Date.now() - 5000, we might hit a segment that is still recording.
+    const safeDelayMs = Math.max(this.delaySeconds * 1000, 7000); // Minimum 7s buffer behind live edge
+    const targetTimestamp = Date.now() - safeDelayMs;
+
     const current = await Database.getSegmentAtTime(this.sessionId, targetTimestamp);
 
     if (current) {

@@ -76,7 +76,7 @@ export const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
       onResponderRelease={handleTouchEnd}
     >
       <Svg style={StyleSheet.absoluteFill}>
-        {paths.map((p, i) => renderPath(p, i))}
+        {paths.map((p, _i) => renderPath(p, _i))}
         {currentPath && renderPath(currentPath, 9999)}
       </Svg>
     </View>
