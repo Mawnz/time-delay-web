@@ -152,10 +152,19 @@ export const usePlayerSync = (options: PlayerSyncOptions) => {
       if (isPaused || isSeekingRef.current) return;
       
       if (!currentSegmentRef.current) {
-        const initial = await playerEngine.getInitialSegment();
-        if (initial) {
-            currentSegmentRef.current = initial;
-            setCurrentSegment(initial);
+        const sessionStart = sessionStartTime;
+        if (sessionStart) {
+            const elapsedMs = Date.now() - sessionStart;
+            // Ensure we wait long enough before pulling the first segment
+            // so we don't starve on the live edge.
+            const safeDelayMs = Math.max(delay * 1000, 7000);
+            if (elapsedMs >= safeDelayMs) {
+                const initial = await playerEngine.getInitialSegment();
+                if (initial) {
+                    currentSegmentRef.current = initial;
+                    setCurrentSegment(initial);
+                }
+            }
         }
       } else {
         const next = await playerEngine.getNextSegment();
@@ -167,7 +176,7 @@ export const usePlayerSync = (options: PlayerSyncOptions) => {
         if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
         clearSeekFailSafe();
     };
-  }, [sessionId, delay, isPaused]);
+  }, [sessionId, delay, isPaused, sessionStartTime]);
 
   return {
     playerRef,

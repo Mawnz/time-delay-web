@@ -18,7 +18,6 @@ import {
   Text,
   TouchableOpacity,
   Modal,
-  ScrollView,
   Switch,
 } from 'react-native';
 

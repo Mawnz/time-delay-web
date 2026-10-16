@@ -36,6 +36,8 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
   const scrollRef = useRef<ScrollView>(null);
   const isInteracting = useRef(false);
   const dragStartTimeRef = useRef(0);
+  const [visibleStart, setVisibleStart] = useState(0);
+  const [visibleEnd, setVisibleEnd] = useState(SCREEN_WIDTH * 3);
   
   const latestPropsRef = useRef(props);
   useEffect(() => {
@@ -60,6 +62,12 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
       });
     }
   }, [playheadPos, followPlayhead]);
+
+  const handleScroll = useCallback((e: any) => {
+    const x = e.nativeEvent.contentOffset.x;
+    setVisibleStart(Math.max(0, x - SCREEN_WIDTH));
+    setVisibleEnd(x + SCREEN_WIDTH * 2);
+  }, []);
 
   const createPanResponder = (point: 'A' | 'B') => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -146,7 +154,8 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
         ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        scrollEventThrottle={32}
+        scrollEventThrottle={16}
+        onScroll={handleScroll}
         onScrollBeginDrag={() => { isInteracting.current = true; }}
         onScrollEndDrag={() => { isInteracting.current = false; }}
         onScroll={(e) => setScrollX(e.nativeEvent.contentOffset.x)}
