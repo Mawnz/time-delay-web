@@ -36,8 +36,6 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
   const scrollRef = useRef<ScrollView>(null);
   const isInteracting = useRef(false);
   const dragStartTimeRef = useRef(0);
-  const [visibleStart, setVisibleStart] = useState(0);
-  const [visibleEnd, setVisibleEnd] = useState(SCREEN_WIDTH * 3);
   
   const latestPropsRef = useRef(props);
   useEffect(() => {
@@ -62,12 +60,6 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
       });
     }
   }, [playheadPos, followPlayhead]);
-
-  const handleScroll = useCallback((e: any) => {
-    const x = e.nativeEvent.contentOffset.x;
-    setVisibleStart(Math.max(0, x - SCREEN_WIDTH));
-    setVisibleEnd(x + SCREEN_WIDTH * 2);
-  }, []);
 
   const createPanResponder = (point: 'A' | 'B') => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -111,26 +103,78 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
     return ticks;
   }, [duration, zoomLevel]);
 
-  // BOLT OPTIMIZATION: Memoize O(N) array mapping for thumbnails.
-  // Prevents re-calculating positions and re-rendering images 10x/sec on currentTime updates.
-  const renderedThumbnails = useMemo(() => thumbnails.map((t) => {
-    const startTime = sessionStartTime || (thumbnails.length > 0 ? thumbnails[0].timestamp : 0);
-    const pos = ((t.timestamp - startTime) / 1000) * zoomLevel;
+  // BOLT OPTIMIZATION: O(log N) Virtualization for thumbnails
+  // We avoid O(N) mapping over the entire thumbnail array on every scroll frame.
+  // Thumbnails are time-ordered, so we can binary search to find the visible bounds.
+  const renderedThumbnails = useMemo(() => {
+    if (thumbnails.length === 0) return null;
+
+    const startTime = sessionStartTime || thumbnails[0].timestamp;
     const thumbWidth = 5 * zoomLevel;
 
-    // Virtualization: Only render if within visible window (+/- 1 screen width buffer)
-    const isVisible = pos + thumbWidth >= scrollX - SCREEN_WIDTH && pos <= scrollX + SCREEN_WIDTH * 2;
+    // We want thumbnails where:
+    // rightEdge >= scrollX - SCREEN_WIDTH
+    // leftEdge <= scrollX + SCREEN_WIDTH * 2
 
-    if (!isVisible) return null;
+    const minPos = scrollX - SCREEN_WIDTH;
+    const maxPos = scrollX + SCREEN_WIDTH * 2;
 
-    return (
-      <Image
-        key={t.id}
-        source={{ uri: 'file://' + t.path }}
-        style={[styles.thumbnail, { position: 'absolute', left: pos, width: thumbWidth }]}
-      />
-    );
-  }), [thumbnails, sessionStartTime, zoomLevel, scrollX]);
+    // Time window that corresponds to the visible screen area
+    const minTimeMs = startTime + ((minPos - thumbWidth) / zoomLevel) * 1000;
+    const maxTimeMs = startTime + (maxPos / zoomLevel) * 1000;
+
+    // Check if completely out of bounds (before start or after end)
+    if (minTimeMs > thumbnails[thumbnails.length - 1].timestamp || maxTimeMs < thumbnails[0].timestamp) {
+        return [];
+    }
+
+    // Binary search for start index
+    let left = 0;
+    let right = thumbnails.length - 1;
+    let startIndex = 0;
+
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      if (thumbnails[mid].timestamp >= minTimeMs) {
+        startIndex = mid;
+        right = mid - 1;
+      } else {
+        left = mid + 1;
+      }
+    }
+
+    // Binary search for end index
+    left = startIndex;
+    right = thumbnails.length - 1;
+    let endIndex = thumbnails.length - 1;
+
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      if (thumbnails[mid].timestamp <= maxTimeMs) {
+        endIndex = mid;
+        left = mid + 1;
+      } else {
+        right = mid - 1;
+      }
+    }
+
+    // Ensure endIndex >= startIndex (edge cases if scrolling completely off-screen, handled above but as a safeguard)
+    if (endIndex < startIndex) endIndex = startIndex;
+
+    // Only map over strictly visible slice
+    const visibleSlice = thumbnails.slice(Math.max(0, startIndex - 1), Math.min(thumbnails.length, endIndex + 2));
+
+    return visibleSlice.map((t) => {
+      const pos = ((t.timestamp - startTime) / 1000) * zoomLevel;
+      return (
+        <Image
+          key={t.id}
+          source={{ uri: 'file://' + t.path }}
+          style={[styles.thumbnail, { position: 'absolute', left: pos, width: thumbWidth }]}
+        />
+      );
+    });
+  }, [thumbnails, sessionStartTime, zoomLevel, scrollX]);
 
   const selectionStyle = useMemo(() => {
     if (pointA === null || pointB === null) return null;
@@ -141,25 +185,6 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
       width: Math.max(2, end - start),
     };
   }, [pointA, pointB, zoomLevel]);
-
-  const renderedThumbnails = useMemo(() => thumbnails.map((t) => {
-    const startTime = sessionStartTime || (thumbnails.length > 0 ? thumbnails[0].timestamp : 0);
-    const pos = ((t.timestamp - startTime) / 1000) * zoomLevel;
-    const thumbWidth = 5 * zoomLevel;
-
-    // Virtualization: Only render if within visible window (+/- 1 screen width buffer)
-    const isVisible = pos + thumbWidth >= scrollX - SCREEN_WIDTH && pos <= scrollX + SCREEN_WIDTH * 2;
-
-    if (!isVisible) return null;
-
-    return (
-      <Image
-        key={t.id}
-        source={{ uri: 'file://' + t.path }}
-        style={[styles.thumbnail, { position: 'absolute', left: pos, width: thumbWidth }]}
-      />
-    );
-  }), [thumbnails, sessionStartTime, zoomLevel, scrollX]);
 
   return (
     <View style={styles.container}>
@@ -174,7 +199,6 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
         horizontal
         showsHorizontalScrollIndicator={false}
         scrollEventThrottle={16}
-        onScroll={handleScroll}
         onScrollBeginDrag={() => { isInteracting.current = true; }}
         onScrollEndDrag={() => { isInteracting.current = false; }}
         onScroll={(e) => setScrollX(e.nativeEvent.contentOffset.x)}
