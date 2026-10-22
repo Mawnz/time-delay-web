@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { StyleSheet, View, Dimensions } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
 import { DrawingPath } from '../types';
@@ -49,10 +49,15 @@ export const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
     setCurrentPath(null);
   };
 
-  const renderPath = (path: DrawingPath, index: number) => {
-    const d = path.points
-      .map((p, i) => `${p.type === 'start' ? 'M' : 'L'}${p.x},${p.y}`)
-      .join(' ');
+  const renderPath = React.useCallback((path: DrawingPath, index: number) => {
+    // ⚡ BOLT OPTIMIZATION: Replaced map().join() with a fast string builder loop.
+    // This executes at 60Hz during active drawing for currentPath. Array allocation
+    // overhead via map() caused GC pauses and micro-stutters during fast strokes.
+    let d = '';
+    for (let i = 0; i < path.points.length; i++) {
+      const p = path.points[i];
+      d += (p.type === 'start' ? 'M' : 'L') + p.x + ',' + p.y + ' ';
+    }
 
     return (
       <Path
@@ -65,7 +70,14 @@ export const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
         strokeLinejoin="round"
       />
     );
-  };
+  }, []);
+
+  // ⚡ BOLT OPTIMIZATION: Memoize static paths rendering.
+  // AnnotationOverlay re-renders ~10x/sec when currentTime updates from App.tsx.
+  // We avoid rebuilding the entire SVG path tree for static annotations every frame.
+  const renderedStaticPaths = useMemo(() => {
+    return paths.map((p, _i) => renderPath(p, _i));
+  }, [paths, renderPath]);
 
   return (
     <View 
@@ -76,7 +88,7 @@ export const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
       onResponderRelease={handleTouchEnd}
     >
       <Svg style={StyleSheet.absoluteFill}>
-        {paths.map((p, _i) => renderPath(p, _i))}
+        {renderedStaticPaths}
         {currentPath && renderPath(currentPath, 9999)}
       </Svg>
     </View>

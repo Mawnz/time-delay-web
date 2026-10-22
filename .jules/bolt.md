@@ -20,3 +20,7 @@ Always wrap iterative UI generation blocks in `useMemo()` inside components that
 ## 2024-10-25 - Never modify package.json/package-lock.json without explicit instruction
 **Learning:** During test/lint runs, some local dependency configurations caused errors. I attempted to fix these by adding missing plugins directly to `package.json`. However, this was an explicit violation of the `Never do: Modify package.json or tsconfig.json without instruction` boundary.
 **Action:** When running tools like `eslint` or `jest` that fail due to missing plugins/configuration out-of-the-box, rely on workarounds if possible, or report the failure if it is out-of-scope/unfixable without dependency changes. Never mutate the lockfile or dependency tree to satisfy a linter unless explicitly instructed.
+
+## 2024-10-25 - Avoid array allocation (map/join) in 60Hz render loops (SVG paths)
+**Learning:** In `AnnotationOverlay.tsx`, building SVG `d` strings using `.map().join(' ')` caused significant array allocation overhead and GC pauses because the component was rendering at 60Hz during active touch/draw events, and ~10Hz from `currentTime` playback updates.
+**Action:** Replace `.map().join()` with simple `for`-loop string concatenation when generating large path strings on every frame. Also, wrap static path rendering in `useMemo` so that parent state updates (like `currentTime`) do not cause unnecessary recalculation of static SVG nodes.
