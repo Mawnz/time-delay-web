@@ -24,3 +24,7 @@ Always wrap iterative UI generation blocks in `useMemo()` inside components that
 ## 2024-10-25 - Avoid array allocation (map/join) in 60Hz render loops (SVG paths)
 **Learning:** In `AnnotationOverlay.tsx`, building SVG `d` strings using `.map().join(' ')` caused significant array allocation overhead and GC pauses because the component was rendering at 60Hz during active touch/draw events, and ~10Hz from `currentTime` playback updates.
 **Action:** Replace `.map().join()` with simple `for`-loop string concatenation when generating large path strings on every frame. Also, wrap static path rendering in `useMemo` so that parent state updates (like `currentTime`) do not cause unnecessary recalculation of static SVG nodes.
+
+## 2024-10-25 - React.memo() defeat by fast-updating parent loops
+**Learning:** `App.tsx` has a fast-updating loop (`currentTime` updates ~10x/sec during playback). Pure UI child components (`ControlBar`, `ZoomControls`, etc) were correctly wrapped in `React.memo()`, but were being passed inline functions (e.g., `onToggleLoop={() => ...}`). This completely defeated `React.memo()`, causing all child UI components to diff/re-render 10x per second, leading to UI thread starvation.
+**Action:** Always extract inline callback functions passed to `React.memo()` components using `useCallback()`, *especially* when the parent component contains a high-frequency update loop (like a playback timer or scroll listener).
