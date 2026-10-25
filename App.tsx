@@ -148,6 +148,14 @@ export default function App() {
     setFollowPlayhead(true);
   }, [duration, delay, handleSeek]);
 
+  const handleToggleLoop = useCallback(() => setLoopEnabled(v => !v), []);
+  const handleTogglePlayback = useCallback(() => setIsPaused(v => !v), []);
+  const handleToggleSlowMo = useCallback(() => setPlaybackRate(p => p === 1.0 ? 0.5 : 1.0), []);
+  const handleStepBack = useCallback(() => { setIsPaused(true); stepFrame(-1); }, [stepFrame]);
+  const handleStepForward = useCallback(() => { setIsPaused(true); stepFrame(1); }, [stepFrame]);
+  const handleZoomIn = useCallback(() => setZoomLevel(prev => Math.min(100, prev + 5)), []);
+  const handleZoomOut = useCallback(() => setZoomLevel(prev => Math.max(5, prev - 5)), []);
+
   // ── Permission / device guards ────────────────────────────────────────────
 
   if (!hasPermission) {
@@ -295,8 +303,8 @@ export default function App() {
 
         {/* Zoom controls */}
         <ZoomControls
-          onZoomIn={() => setZoomLevel(prev => Math.min(100, prev + 5))}
-          onZoomOut={() => setZoomLevel(prev => Math.max(5, prev - 5))}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
         />
 
         {/* Bottom: timeline + control bar */}
@@ -325,17 +333,17 @@ export default function App() {
           <View style={{ height: 100, width: '100%', justifyContent: 'center' }}>
             <ControlBar
               loopEnabled={loopEnabled}
-              onToggleLoop={() => setLoopEnabled(v => !v)}
+              onToggleLoop={handleToggleLoop}
               onClearPoints={handleClearPoints}
               isRecording={isRecording}
               isTransition={isRecordingTransition}
               onToggleRecording={handleToggleRecording}
               playbackRate={playbackRate}
-              onToggleSlowMo={() => setPlaybackRate(playbackRate === 1.0 ? 0.5 : 1.0)}
+              onToggleSlowMo={handleToggleSlowMo}
               isPaused={isPaused}
-              onTogglePlayback={() => setIsPaused(v => !v)}
-              onStepBack={() => { setIsPaused(true); stepFrame(-1); }}
-              onStepForward={() => { setIsPaused(true); stepFrame(1); }}
+              onTogglePlayback={handleTogglePlayback}
+              onStepBack={handleStepBack}
+              onStepForward={handleStepForward}
             />
           </View>
         </View>
