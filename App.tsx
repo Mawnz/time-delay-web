@@ -148,6 +148,45 @@ export default function App() {
     setFollowPlayhead(true);
   }, [duration, delay, handleSeek]);
 
+  const handleZoomIn = useCallback(() => setZoomLevel(prev => Math.min(100, prev + 5)), []);
+  const handleZoomOut = useCallback(() => setZoomLevel(prev => Math.max(5, prev - 5)), []);
+
+  const handleTimelineLongPress = useCallback((t: number) => {
+    setPointA(Math.max(0, t - 3));
+    setPointB(Math.min(duration, t + 3));
+    setLoopEnabled(true);
+    handleSeek(Math.max(0, t - 3));
+  }, [duration, handleSeek]);
+
+  const handleToggleLoop = useCallback(() => setLoopEnabled(v => !v), []);
+  const handleToggleSlowMo = useCallback(() => setPlaybackRate(prev => prev === 1.0 ? 0.5 : 1.0), []);
+  const handleTogglePlayback = useCallback(() => setIsPaused(v => !v), []);
+  const handleStepBack = useCallback(() => { setIsPaused(true); stepFrame(-1); }, [stepFrame]);
+  const handleStepForward = useCallback(() => { setIsPaused(true); stepFrame(1); }, [stepFrame]);
+
+  const handleMenuClose = useCallback(() => setMenuVisible(false), []);
+  const handleSyncFromMenu = useCallback(() => { handleSyncToDelay(); setMenuVisible(false); }, [handleSyncToDelay]);
+  const handleToggleFollowPlayhead = useCallback(() => setFollowPlayhead(v => !v), []);
+  const handleToggleCamera = useCallback(() => setCameraPosition(p => p === 'back' ? 'front' : 'back'), []);
+  const handleToggleFocusLock = useCallback(() => setIsFocusLocked(v => !v), []);
+  const handleToggleMute = useCallback(() => setIsMuted(v => !v), []);
+  const handleOpenSessions = useCallback(() => { setSessionModalVisible(true); setMenuVisible(false); }, []);
+
+  const handleScrubStart = useCallback(() => setIsScrubbing(true), []);
+  const handleScrubEnd = useCallback(() => setIsScrubbing(false), []);
+
+  const handlePipToggle = useCallback(() => setIsPipMinimized(v => !v), []);
+
+  const handleOpenMenu = useCallback(() => setMenuVisible(true), []);
+
+  const handlePathsChange = useCallback((p: DrawingPath[]) => {
+    setCurrentPaths(p);
+    if (sessionId) Database.addAnnotation(sessionId, currentTime, JSON.stringify(p));
+  }, [sessionId, currentTime]);
+
+  const handleSessionClose = useCallback(() => setSessionModalVisible(false), []);
+  const handleSessionSelect = useCallback(() => setSessionModalVisible(false), []);
+
   // ── Permission / device guards ────────────────────────────────────────────
 
   if (!hasPermission) {
@@ -212,8 +251,8 @@ export default function App() {
           transform={videoTransform}
           onSeek={handleSeek}
           onGestureChange={setVideoTransform}
-          onScrubStart={() => setIsScrubbing(true)}
-          onScrubEnd={() => setIsScrubbing(false)}
+          onScrubStart={handleScrubStart}
+          onScrubEnd={handleScrubEnd}
           passThrough={isPaused && currentPaths.length > 0}
         />
 
@@ -250,7 +289,7 @@ export default function App() {
           {/* Tap whole PiP to toggle minimise */}
           <View
             style={StyleSheet.absoluteFill}
-            onTouchEnd={() => setIsPipMinimized(v => !v)}
+            onTouchEnd={handlePipToggle}
           />
           {!isPipMinimized && (
             <View style={isRecording ? styles.recBadge : styles.liveBadge}>
@@ -275,10 +314,7 @@ export default function App() {
         <AnnotationOverlay
           enabled={isPaused}
           paths={currentPaths}
-          onPathsChange={p => {
-            setCurrentPaths(p);
-            if (sessionId) Database.addAnnotation(sessionId, currentTime, JSON.stringify(p));
-          }}
+          onPathsChange={handlePathsChange}
           color="red"
           strokeWidth={3}
         />
@@ -290,13 +326,13 @@ export default function App() {
             isTransition={isRecordingTransition}
             onToggle={handleToggleRecording}
           />
-          <MenuButton onPress={() => setMenuVisible(true)} />
+          <MenuButton onPress={handleOpenMenu} />
         </View>
 
         {/* Zoom controls */}
         <ZoomControls
-          onZoomIn={() => setZoomLevel(prev => Math.min(100, prev + 5))}
-          onZoomOut={() => setZoomLevel(prev => Math.max(5, prev - 5))}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
         />
 
         {/* Bottom: timeline + control bar */}
@@ -308,12 +344,7 @@ export default function App() {
               duration={duration}
               zoomLevel={zoomLevel}
               onSeek={handleSeek}
-              onLongPress={t => {
-                setPointA(Math.max(0, t - 3));
-                setPointB(Math.min(duration, t + 3));
-                setLoopEnabled(true);
-                handleSeek(Math.max(0, t - 3));
-              }}
+              onLongPress={handleTimelineLongPress}
               pointA={pointA}
               pointB={pointB}
               onUpdatePoint={handleUpdatePoint}
@@ -325,17 +356,17 @@ export default function App() {
           <View style={{ height: 100, width: '100%', justifyContent: 'center' }}>
             <ControlBar
               loopEnabled={loopEnabled}
-              onToggleLoop={() => setLoopEnabled(v => !v)}
+              onToggleLoop={handleToggleLoop}
               onClearPoints={handleClearPoints}
               isRecording={isRecording}
               isTransition={isRecordingTransition}
               onToggleRecording={handleToggleRecording}
               playbackRate={playbackRate}
-              onToggleSlowMo={() => setPlaybackRate(playbackRate === 1.0 ? 0.5 : 1.0)}
+              onToggleSlowMo={handleToggleSlowMo}
               isPaused={isPaused}
-              onTogglePlayback={() => setIsPaused(v => !v)}
-              onStepBack={() => { setIsPaused(true); stepFrame(-1); }}
-              onStepForward={() => { setIsPaused(true); stepFrame(1); }}
+              onTogglePlayback={handleTogglePlayback}
+              onStepBack={handleStepBack}
+              onStepForward={handleStepForward}
             />
           </View>
         </View>
@@ -344,26 +375,26 @@ export default function App() {
       {/* ── Settings menu sheet ── */}
       <SettingsMenu
         visible={menuVisible}
-        onClose={() => setMenuVisible(false)}
+        onClose={handleMenuClose}
         delay={delay}
         onSetDelay={setDelay}
-        onSync={() => { handleSyncToDelay(); setMenuVisible(false); }}
+        onSync={handleSyncFromMenu}
         followPlayhead={followPlayhead}
-        onToggleFollow={() => setFollowPlayhead(v => !v)}
+        onToggleFollow={handleToggleFollowPlayhead}
         cameraPosition={cameraPosition}
-        onToggleCamera={() => setCameraPosition(p => p === 'back' ? 'front' : 'back')}
+        onToggleCamera={handleToggleCamera}
         isFocusLocked={isFocusLocked}
-        onToggleFocusLock={() => setIsFocusLocked(v => !v)}
+        onToggleFocusLock={handleToggleFocusLock}
         isMuted={isMuted}
-        onToggleMute={() => setIsMuted(v => !v)}
-        onOpenSessions={() => { setSessionModalVisible(true); setMenuVisible(false); }}
+        onToggleMute={handleToggleMute}
+        onOpenSessions={handleOpenSessions}
       />
 
       {/* ── Session list ── */}
       <SessionManager
         visible={sessionModalVisible}
-        onClose={() => setSessionModalVisible(false)}
-        onSelectSession={() => setSessionModalVisible(false)}
+        onClose={handleSessionClose}
+        onSelectSession={handleSessionSelect}
         activeSessionId={sessionId}
       />
     </View>
