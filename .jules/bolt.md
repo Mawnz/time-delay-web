@@ -24,3 +24,7 @@ Always wrap iterative UI generation blocks in `useMemo()` inside components that
 ## 2024-10-25 - Avoid array allocation (map/join) in 60Hz render loops (SVG paths)
 **Learning:** In `AnnotationOverlay.tsx`, building SVG `d` strings using `.map().join(' ')` caused significant array allocation overhead and GC pauses because the component was rendering at 60Hz during active touch/draw events, and ~10Hz from `currentTime` playback updates.
 **Action:** Replace `.map().join()` with simple `for`-loop string concatenation when generating large path strings on every frame. Also, wrap static path rendering in `useMemo` so that parent state updates (like `currentTime`) do not cause unnecessary recalculation of static SVG nodes.
+
+## 2024-11-20 - Prevent callback invalidation from fast-updating dependencies
+**Learning:** In `App.tsx`, `handlePathsChange` needed access to `currentTime` to save drawing annotations. However, adding `currentTime` to its `useCallback` dependency array meant the function was recreated 10x/sec during video playback, completely breaking the `React.memo` on the expensive `AnnotationOverlay` SVG layer.
+**Action:** When a callback needs to read a fast-updating state but shouldn't trigger re-renders of the components it's passed to, mirror the state in a `useRef` (updated via `useEffect`). The callback can read `.current` without needing it in its dependency array, preserving functional stability.

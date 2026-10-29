@@ -10,7 +10,7 @@ interface SessionManagerProps {
   activeSessionId: string | null;
 }
 
-export const SessionManager: React.FC<SessionManagerProps> = ({
+export const SessionManager: React.FC<SessionManagerProps> = React.memo(({
   visible,
   onClose,
   onSelectSession,
@@ -88,7 +88,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
       </View>
     </Modal>
   );
-};
+});
 
 const styles = StyleSheet.create({
   modalContainer: {

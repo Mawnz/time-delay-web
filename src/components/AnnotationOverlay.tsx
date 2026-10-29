@@ -13,7 +13,7 @@ interface AnnotationOverlayProps {
   strokeWidth: number;
 }
 
-export const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
+export const AnnotationOverlay: React.FC<AnnotationOverlayProps> = React.memo(({
   paths,
   onPathsChange,
   enabled,
@@ -93,4 +93,4 @@ export const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
       </Svg>
     </View>
   );
-};
+});
