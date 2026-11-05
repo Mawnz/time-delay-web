@@ -170,6 +170,37 @@ export default function App() {
     );
   }
 
+
+  // ⚡ BOLT OPTIMIZATION: Extract inline functions into useCallbacks.
+  // App.tsx re-renders ~10x/sec when currentTime updates during playback.
+  // Passing inline functions to React.memo child components (like ControlBar, SettingsMenu)
+  // breaks their memoization, causing them to re-render unnecessarily on every frame.
+
+  const handleZoomIn = useCallback(() => setZoomLevel(prev => Math.min(100, prev + 5)), []);
+  const handleZoomOut = useCallback(() => setZoomLevel(prev => Math.max(5, prev - 5)), []);
+
+  const handleTimelineLongPress = useCallback((t: number) => {
+    setPointA(Math.max(0, t - 3));
+    setPointB(Math.min(duration, t + 3));
+    setLoopEnabled(true);
+    handleSeek(Math.max(0, t - 3));
+  }, [duration, handleSeek]);
+
+  const handleToggleLoop = useCallback(() => setLoopEnabled(v => !v), []);
+  const handleToggleSlowMo = useCallback(() => setPlaybackRate(prev => prev === 1.0 ? 0.5 : 1.0), []);
+  const handleTogglePlayback = useCallback(() => setIsPaused(v => !v), []);
+  const handleStepBack = useCallback(() => { setIsPaused(true); stepFrame(-1); }, [stepFrame]);
+  const handleStepForward = useCallback(() => { setIsPaused(true); stepFrame(1); }, [stepFrame]);
+
+  const handleCloseMenu = useCallback(() => setMenuVisible(false), []);
+  const handleSyncFromMenu = useCallback(() => { handleSyncToDelay(); setMenuVisible(false); }, [handleSyncToDelay]);
+  const handleToggleFollow = useCallback(() => setFollowPlayhead(v => !v), []);
+  const handleToggleCamera = useCallback(() => setCameraPosition(p => p === 'back' ? 'front' : 'back'), []);
+  const handleToggleFocusLock = useCallback(() => setIsFocusLocked(v => !v), []);
+  const handleToggleMute = useCallback(() => setIsMuted(v => !v), []);
+  const handleOpenSessions = useCallback(() => { setSessionModalVisible(true); setMenuVisible(false); }, []);
+  const handleCloseSessions = useCallback(() => setSessionModalVisible(false), []);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -295,8 +326,8 @@ export default function App() {
 
         {/* Zoom controls */}
         <ZoomControls
-          onZoomIn={() => setZoomLevel(prev => Math.min(100, prev + 5))}
-          onZoomOut={() => setZoomLevel(prev => Math.max(5, prev - 5))}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
         />
 
         {/* Bottom: timeline + control bar */}
@@ -308,12 +339,7 @@ export default function App() {
               duration={duration}
               zoomLevel={zoomLevel}
               onSeek={handleSeek}
-              onLongPress={t => {
-                setPointA(Math.max(0, t - 3));
-                setPointB(Math.min(duration, t + 3));
-                setLoopEnabled(true);
-                handleSeek(Math.max(0, t - 3));
-              }}
+              onLongPress={handleTimelineLongPress}
               pointA={pointA}
               pointB={pointB}
               onUpdatePoint={handleUpdatePoint}
@@ -325,17 +351,17 @@ export default function App() {
           <View style={{ height: 100, width: '100%', justifyContent: 'center' }}>
             <ControlBar
               loopEnabled={loopEnabled}
-              onToggleLoop={() => setLoopEnabled(v => !v)}
+              onToggleLoop={handleToggleLoop}
               onClearPoints={handleClearPoints}
               isRecording={isRecording}
               isTransition={isRecordingTransition}
               onToggleRecording={handleToggleRecording}
               playbackRate={playbackRate}
-              onToggleSlowMo={() => setPlaybackRate(playbackRate === 1.0 ? 0.5 : 1.0)}
+              onToggleSlowMo={handleToggleSlowMo}
               isPaused={isPaused}
-              onTogglePlayback={() => setIsPaused(v => !v)}
-              onStepBack={() => { setIsPaused(true); stepFrame(-1); }}
-              onStepForward={() => { setIsPaused(true); stepFrame(1); }}
+              onTogglePlayback={handleTogglePlayback}
+              onStepBack={handleStepBack}
+              onStepForward={handleStepForward}
             />
           </View>
         </View>
@@ -344,26 +370,26 @@ export default function App() {
       {/* ── Settings menu sheet ── */}
       <SettingsMenu
         visible={menuVisible}
-        onClose={() => setMenuVisible(false)}
+        onClose={handleCloseMenu}
         delay={delay}
         onSetDelay={setDelay}
-        onSync={() => { handleSyncToDelay(); setMenuVisible(false); }}
+        onSync={handleSyncFromMenu}
         followPlayhead={followPlayhead}
-        onToggleFollow={() => setFollowPlayhead(v => !v)}
+        onToggleFollow={handleToggleFollow}
         cameraPosition={cameraPosition}
-        onToggleCamera={() => setCameraPosition(p => p === 'back' ? 'front' : 'back')}
+        onToggleCamera={handleToggleCamera}
         isFocusLocked={isFocusLocked}
-        onToggleFocusLock={() => setIsFocusLocked(v => !v)}
+        onToggleFocusLock={handleToggleFocusLock}
         isMuted={isMuted}
-        onToggleMute={() => setIsMuted(v => !v)}
-        onOpenSessions={() => { setSessionModalVisible(true); setMenuVisible(false); }}
+        onToggleMute={handleToggleMute}
+        onOpenSessions={handleOpenSessions}
       />
 
       {/* ── Session list ── */}
       <SessionManager
         visible={sessionModalVisible}
-        onClose={() => setSessionModalVisible(false)}
-        onSelectSession={() => setSessionModalVisible(false)}
+        onClose={handleCloseSessions}
+        onSelectSession={handleCloseSessions}
         activeSessionId={sessionId}
       />
     </View>
