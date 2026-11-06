@@ -18,7 +18,7 @@ interface TimelineProps {
   followPlayhead: boolean;
 }
 
-export const Timeline: React.FC<TimelineProps> = (props) => {
+export const Timeline: React.FC<TimelineProps> = React.memo((props) => {
   const {
     thumbnails,
     currentTime,
@@ -256,7 +256,7 @@ export const Timeline: React.FC<TimelineProps> = (props) => {
       </ScrollView>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: { height: 120, backgroundColor: '#111', borderTopWidth: 1, borderColor: '#333' },

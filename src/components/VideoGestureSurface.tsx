@@ -91,7 +91,7 @@ function clamp(value: number, min: number, max: number): number {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export const VideoGestureSurface: React.FC<VideoGestureSurfaceProps> = ({
+export const VideoGestureSurface: React.FC<VideoGestureSurfaceProps> = React.memo(({
   currentTime,
   duration,
   zoomLevel,
@@ -306,7 +306,7 @@ export const VideoGestureSurface: React.FC<VideoGestureSurfaceProps> = ({
       collapsable={false}
     />
   );
-};
+});
 
 const styles = StyleSheet.create({
   surface: {
