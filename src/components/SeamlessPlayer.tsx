@@ -21,7 +21,7 @@ export interface SeamlessPlayerRef {
   prepareSeek: (segment: Segment, offset: number) => void;
 }
 
-export const SeamlessPlayer = React.forwardRef<SeamlessPlayerRef, SeamlessPlayerProps>((props, ref) => {
+export const SeamlessPlayer = React.memo(React.forwardRef<SeamlessPlayerRef, SeamlessPlayerProps>((props, ref) => {
   const {
     currentSegment,
     nextSegment,
@@ -129,7 +129,7 @@ export const SeamlessPlayer = React.forwardRef<SeamlessPlayerRef, SeamlessPlayer
       {renderPlayer('B')}
     </View>
   );
-});
+}));
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
